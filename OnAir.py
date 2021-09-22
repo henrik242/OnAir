@@ -13,10 +13,6 @@ import paho.mqtt.client as mqtt
 import rumps
 
 
-# Thanks to
-# - https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/
-# - https://www.hivemq.com/blog/mqtt-client-library-paho-python/
-
 class OnAir(object):
     def __init__(self):
         self.app = rumps.App("OnAir", "🟢")
