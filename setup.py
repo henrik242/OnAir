@@ -3,7 +3,7 @@
 from setuptools import setup
 
 APP = ['OnAir.py']
-DATA_FILES = []
+DATA_FILES = [".onair.ini"]
 OPTIONS = {
     'argv_emulation': True,
     'iconfile': 'onair.icns',

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
+import configparser
 import os
 import re
+import shutil
 import threading
 import time
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import rumps
@@ -24,6 +27,7 @@ class OnAir(object):
 
     def run(self):
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
+        self.log(str(self.args))
         self.app.run()
 
     def log(self, msg):
@@ -62,7 +66,9 @@ class OnAir(object):
     def create_mqtt_client(self):
         self.log("create_mqtt_client()")
         client = mqtt.Client(protocol=mqtt.MQTTv31)
-        client.username_pw_set(self.args.user[0], self.args.password[0])
+        user = self.args.user if type(self.args.user) is str else self.args.user[0]
+        password = self.args.password if type(self.args.password) is str else self.args.password[0]
+        client.username_pw_set(user, password)
         client.on_connect = self.mqtt_on_connect
         client.on_publish = self.mqtt_on_publish
         client.connect(self.args.host, self.args.port)
@@ -125,14 +131,29 @@ class OnAir(object):
 
     @staticmethod
     def parse_args():
+        appconfig = ".onair.ini"
+        homeconfig = str(Path.home()) + "/.onair.ini"
+
+        if not os.path.isfile(homeconfig):
+            shutil.copy(appconfig, homeconfig)
+
+        config = configparser.ConfigParser()
+        config.read(homeconfig)
+
+        user = config.get('DEFAULT', 'user', fallback=None)
+        password = config.get('DEFAULT', 'password', fallback=None)
+        host = config.get('DEFAULT', 'host', fallback="futurehome-smarthub.local")
+        port = config.getint('DEFAULT', 'port', fallback=1884)
+        topic = config.get('DEFAULT', 'topic', fallback="pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0")
+        debug = config.getboolean('DEFAULT', 'debug', fallback=False)
+
         parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--host', nargs=1, help=" ", default="futurehome-smarthub.local")
-        parser.add_argument('--port', nargs=1, help=" ", type=int, default=1884)
-        parser.add_argument('--topic', nargs=1, help=" ",
-                            default="pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0")
-        parser.add_argument('--user', nargs=1, help=" ", required=True)
-        parser.add_argument('--password', nargs=1, help=" ", required=True)
-        parser.add_argument('--debug', action='store_true', help=" ")
+        parser.add_argument('--host', nargs=1, help=" ", default=host)
+        parser.add_argument('--port', nargs=1, help=" ", type=int, default=port)
+        parser.add_argument('--topic', nargs=1, help=" ", default=topic)
+        parser.add_argument('--user', nargs=1, required=(user is None), default=user)
+        parser.add_argument('--password', nargs=1, required=(user is None), default=password)
+        parser.add_argument('--debug', action='store_true', help=" ", default=debug)
         return parser.parse_args()
 
 
