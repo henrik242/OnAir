@@ -19,7 +19,6 @@ class OnAir(object):
         self.app = rumps.App("OnAir", "🟢")
         self.args = self.parse_args()
         self.mqtt_client = self.create_mqtt_client()
-        self.camera_log_stream = self.open_camera_log()
         self.is_blinking = False
         self.is_reading_log = True
 
@@ -89,16 +88,14 @@ class OnAir(object):
         self.is_reading_log = False
         rumps.quit_application()
 
-    @staticmethod
-    def open_camera_log():
-        return os.popen("""/usr/bin/log stream --predicate 'eventMessage contains "Post event kCameraStream"'""", 'r')
-
     def camera_state_updater(self):
         self.log("camera_state_updater()")
+        log_stream = os.popen(
+            """/usr/bin/log stream --predicate 'eventMessage contains "Post event kCameraStream"'""", 'r')
         cameras = dict()
+
         while self.is_reading_log:
-            item = self.camera_log_stream.readline()
-            self.log(str(self.camera_log_stream.closed))
+            item = log_stream.readline()
             self.log("reading '%s'" % item.strip())
 
             if item == '':
