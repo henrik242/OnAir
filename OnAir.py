@@ -58,7 +58,13 @@ class OnAir(object):
         self.log("menubar_blinker() done")
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
-        self.log("connect rc %d." % rc)
+        if rc == 0:
+            self.log("MQTT connected")
+            self.app.menu['connected'] = rumps.MenuItem(title="MQTT connected")
+        else:
+            self.log("MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
+            self.app.menu['connected'] = rumps.MenuItem(
+                title="MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
 
     def mqtt_on_publish(self, client, obj, msg):
         self.log("publish: %s" % str(msg))
@@ -86,7 +92,6 @@ class OnAir(object):
           "tags": null 
         }""" % state))
 
-        msg_info.wait_for_publish()
         self.log("mqtt_publish() done: %s" % msg_info.is_published())
 
     def quit(self):
