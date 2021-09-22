@@ -152,8 +152,8 @@ class OnAir(object):
         parser.add_argument('--host', nargs=1, help=" ", default=host)
         parser.add_argument('--port', nargs=1, help=" ", type=int, default=port)
         parser.add_argument('--topic', nargs=1, help=" ", default=topic)
-        parser.add_argument('--user', nargs=1, required=(user is None), default=user)
-        parser.add_argument('--password', nargs=1, required=(user is None), default=password)
+        parser.add_argument('--user', nargs=1, default=user)
+        parser.add_argument('--password', nargs=1, default=password)
         parser.add_argument('--debug', action='store_true', help=" ", default=debug)
         return parser.parse_args()
 
