@@ -1,3 +1,5 @@
+![](onair.png)
+
 OnAir status indicator for macOS camera usage
 ==
 
