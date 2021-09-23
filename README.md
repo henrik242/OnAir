@@ -28,6 +28,8 @@ Building the app
 --
 
 ```
+pip3 install rumps
+pip3 install py2app
 ./setup.py py2app
 ```
 
@@ -43,7 +45,11 @@ host=futurehome-smarthub.local
 port=1884
 topic=pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0
 debug=False
-```
+
+
+Releases
+========
+Fetch the latest build from https://nightly.link/henrik242/OnAir/workflows/main/main/OnAir.app.tgz.zip```
 
 Thanks to
 --
