@@ -14,13 +14,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+
       - uses: actions/setup-python@v2
         with:
          python-version: '3.x'
+
       - name: Engage!
-        run: pip3 install rumps paho-mqtt py2app && ./setup.py py2app
+        run: |
+          pip3 install rumps paho-mqtt py2app
+          ./setup.py py2app
+
       - name: Use tar to keep executable permissions
         run: cd dist && tar czvf OnAir.app.tgz *.app
+
       - name: Upload .app
         uses: actions/upload-artifact@v2
         with:
