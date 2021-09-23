@@ -47,7 +47,7 @@ debug=False
 
 Releases
 --
-Fetch the latest build from <https://nightly.link/henrik242/OnAir/workflows/main/main/OnAir.app.tgz.zip>
+Fetch the latest build from <https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>
 
 Thanks to
 --
