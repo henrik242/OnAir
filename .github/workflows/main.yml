@@ -1,0 +1,29 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+         python-version: '3.x'
+      - name: Engage!
+        run: ./setup.py py2app
+      - name: Use tar to keep executable permissions
+        run: cd dist && tar czvf OnAir.app.tgz *.app
+      - name: Upload .app
+        uses: actions/upload-artifact@v2
+        with:
+          name: OnAir.app.tgz
+          path: dist/OnAir.app.tgz
+
