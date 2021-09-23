@@ -28,8 +28,7 @@ Building the app
 --
 
 ```
-pip3 install rumps
-pip3 install py2app
+pip3 install rumps paho-mqtt py2app
 ./setup.py py2app
 ```
 
