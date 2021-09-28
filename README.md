@@ -3,7 +3,7 @@
 OnAir status indicator for macOS camera usage
 ==
 
-Using a menubar indicator and a MQTT message to FutureHome to turn on/off a bulb
+Using a menubar indicator, and a MQTT message for Futurehome to turn on/off a light bulb
 
 ```
 usage: OnAir.py [-h] [--host HOST] [--port PORT] [--topic TOPIC] [--user USER] [--password PASSWORD] [--debug]
@@ -33,7 +33,7 @@ pip3 install rumps paho-mqtt py2app
 
 This creates OnAir.app in `dist/`
 
-A proper `~/.onair.ini` needs to exist for OnAir.app to run, with the following:
+`~/.onair.ini` needs to exist for OnAir.app to send MQTT messages, with the following:
 
 ```
 [DEFAULT]
