@@ -7,6 +7,7 @@ import re
 import shutil
 import threading
 import time
+import webbrowser
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
@@ -14,8 +15,11 @@ import rumps
 
 
 class OnAir(object):
+    menuAbout = "About OnAir"
+
     def __init__(self):
         self.app = rumps.App("OnAir", "🟢")
+        self.app.menu.add(rumps.MenuItem(title=self.menuAbout, callback=self.open_onair_url))
         self.args = self.parse_args()
         self.mqtt_client = self.create_mqtt_client()
         self.is_blinking = False
@@ -29,6 +33,10 @@ class OnAir(object):
     def log(self, msg):
         if self.args.debug:
             print("%s" % msg)
+
+    @staticmethod
+    def open_onair_url(sender):
+        webbrowser.open_new_tab("https://github.com/henrik242/OnAir")
 
     def on_air(self):
         self.log("on_air()")
@@ -56,11 +64,11 @@ class OnAir(object):
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.log("MQTT connected")
-            self.app.menu['connected'] = rumps.MenuItem(title="MQTT connected")
+            self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title="MQTT connected"))
         else:
             self.log("MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
-            self.app.menu['connected'] = rumps.MenuItem(
-                title="MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
+            self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(
+                title="MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host)))
 
     def mqtt_on_publish(self, client, obj, msg):
         self.log("publish: %s" % str(msg))
