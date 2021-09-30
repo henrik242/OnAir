@@ -52,6 +52,8 @@ Fetch the latest build from <https://nightly.link/henrik242/OnAir/workflows/buil
 Thanks to
 --
 
+- <https://github.com/jaredks/rumps>
+- <https://github.com/ronaldoussoren/py2app>
 - <https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/>
 - <https://www.hivemq.com/blog/mqtt-client-library-paho-python/>
 
