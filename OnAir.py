@@ -17,6 +17,7 @@ import rumps
 class OnAir(object):
     menuAbout = "About OnAir…"
     menuToggle = "Toggle light"
+    menuMqtt = "MQTT not connected"
 
     def __init__(self):
         self.app = rumps.App("OnAir", "🟢")
@@ -67,27 +68,50 @@ class OnAir(object):
         self.app.title = "🟢"
         self.log("menubar_blinker() done")
 
+    def mqtt_drop_menu(self):
+        try:
+            self.app.menu.pop(self.menuMqtt)
+        except KeyError:
+            pass
+
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            self.log("MQTT connected")
-            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title="MQTT connected"))
+            self.mqtt_drop_menu()
+            self.menuMqtt = "MQTT connected"
+            self.log(self.menuMqtt)
+            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title=self.menuMqtt))
         else:
-            self.log("MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
-            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(
-                title="MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host)))
+            self.mqtt_drop_menu()
+            msg = self.mqtt_err_code(rc)
+            self.menuMqtt = "MQTT not connected (error=%s, user=%s, host=%s)" % (msg, self.args.user, self.args.host)
+            self.log(self.menuMqtt)
+            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title=self.menuMqtt))
+
+    @staticmethod
+    def mqtt_err_code(code):
+        return {
+            0: "connection successful",
+            1: "incorrect protocol version",
+            2: "invalid client identifier",
+            3: "server unavailable",
+            4: "bad username or password",
+            5: "not authorised"
+        }[code]
 
     def mqtt_on_publish(self, client, obj, msg):
         self.log("publish: %s" % str(msg))
 
+    @staticmethod
+    def flatten(obj):
+        return obj[0] if type(obj) is list else obj
+
     def create_mqtt_client(self):
         self.log("create_mqtt_client()")
         client = mqtt.Client(protocol=mqtt.MQTTv31)
-        user = self.args.user if type(self.args.user) is str else self.args.user[0]
-        password = self.args.password if type(self.args.password) is str else self.args.password[0]
-        client.username_pw_set(user, password)
+        client.username_pw_set(self.flatten(self.args.user), self.flatten(self.args.password))
         client.on_connect = self.mqtt_on_connect
         client.on_publish = self.mqtt_on_publish
-        client.connect(self.args.host, self.args.port)
+        client.connect(self.flatten(self.args.host), self.flatten(self.args.port))
         client.loop_start()
         return client
 
