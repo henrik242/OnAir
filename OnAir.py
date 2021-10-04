@@ -15,10 +15,12 @@ import rumps
 
 
 class OnAir(object):
-    menuAbout = "About OnAir"
+    menuAbout = "About OnAir…"
+    menuToggle = "Toggle light"
 
     def __init__(self):
         self.app = rumps.App("OnAir", "🟢")
+        self.app.menu.add(rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
         self.app.menu.add(rumps.MenuItem(title=self.menuAbout, callback=self.open_onair_url))
         self.args = self.parse_args()
         self.mqtt_client = self.create_mqtt_client()
@@ -35,20 +37,24 @@ class OnAir(object):
             print("%s" % msg)
 
     @staticmethod
-    def open_onair_url(sender):
+    def open_onair_url(callback_sender=None):
         webbrowser.open_new_tab("https://github.com/henrik242/OnAir")
 
-    def on_air(self):
+    def on_air(self, callback_sender=None):
         self.log("on_air()")
         self.mqtt_publish("true")
         self.is_blinking = True
         threading.Thread(target=self.menubar_blinker, daemon=True).start()
+        self.app.menu.pop(self.menuToggle)
+        self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title=self.menuToggle, callback=self.off_air))
         self.log("on_air() done")
 
-    def off_air(self):
+    def off_air(self, callback_sender=None):
         self.log("off_air()")
         self.mqtt_publish("false")
         self.is_blinking = False
+        self.app.menu.pop(self.menuToggle)
+        self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
         self.log("off_air() done")
 
     def menubar_blinker(self):
@@ -64,10 +70,10 @@ class OnAir(object):
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.log("MQTT connected")
-            self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title="MQTT connected"))
+            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title="MQTT connected"))
         else:
             self.log("MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host))
-            self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(
+            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(
                 title="MQTT not connected (error=%s, user=%s, host=%s)" % (rc, self.args.user, self.args.host)))
 
     def mqtt_on_publish(self, client, obj, msg):
