@@ -21,6 +21,7 @@ class OnAir(object):
 
     def __init__(self):
         self.app = rumps.App("OnAir", "🟢")
+        self.app.menu.add(rumps.MenuItem(title=self.menuMqtt))
         self.app.menu.add(rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
         self.app.menu.add(rumps.MenuItem(title=self.menuAbout, callback=self.open_onair_url))
         self.args = self.parse_args()
@@ -69,10 +70,7 @@ class OnAir(object):
         self.log("menubar_blinker() done")
 
     def mqtt_drop_menu(self):
-        try:
-            self.app.menu.pop(self.menuMqtt)
-        except KeyError:
-            pass
+        self.app.menu.pop(self.menuMqtt)
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
