@@ -69,17 +69,14 @@ class OnAir(object):
         self.app.title = "🟢"
         self.log("menubar_blinker() done")
 
-    def mqtt_drop_menu(self):
-        self.app.menu.pop(self.menuMqtt)
-
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            self.mqtt_drop_menu()
+            self.app.menu.pop(self.menuMqtt)
             self.menuMqtt = "MQTT connected"
             self.log(self.menuMqtt)
             self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title=self.menuMqtt))
         else:
-            self.mqtt_drop_menu()
+            self.app.menu.pop(self.menuMqtt)
             msg = self.mqtt_err_code(rc)
             self.menuMqtt = "MQTT not connected (error=%s, user=%s, host=%s)" % (msg, self.args.user, self.args.host)
             self.log(self.menuMqtt)
