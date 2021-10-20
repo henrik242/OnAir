@@ -20,7 +20,7 @@ class OnAir(object):
     menuMqtt = "MQTT not connected"
 
     def __init__(self):
-        self.app = rumps.App("OnAir", "🟢")
+        self.app = rumps.App("OnAir", "⚪")
         self.app.menu.add(rumps.MenuItem(title=self.menuMqtt))
         self.app.menu.add(rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
         self.app.menu.add(rumps.MenuItem(title=self.menuAbout, callback=self.open_onair_url))
@@ -61,12 +61,12 @@ class OnAir(object):
 
     def menubar_blinker(self):
         self.log("menubar_blinker()")
-        red = True
+        green = True
         while self.is_blinking:
-            self.app.title = "🔴" if red else "⚪️"
+            self.app.title = "🟢" if green else "⚪️"
             time.sleep(1)
-            red = not red
-        self.app.title = "🟢"
+            green = not green
+        self.app.title = "⚪"
         self.log("menubar_blinker() done")
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
