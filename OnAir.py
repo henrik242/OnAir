@@ -22,7 +22,7 @@ class OnAir(object):
         self.menuMqtt = rumps.MenuItem("MQTT not connected")
         self.app.menu.add(self.menuMqtt)
 
-        self.menuToggle = rumps.MenuItem("Toggle light", callback=self.on_air)
+        self.menuToggle = rumps.MenuItem("Turn on", callback=self.on_air)
         self.app.menu.add(self.menuToggle)
 
         self.app.menu.add(rumps.MenuItem("About OnAir…", callback=self.open_onair_url))
@@ -52,6 +52,7 @@ class OnAir(object):
         self.menubar_blinker_active = True
         threading.Thread(target=self.menubar_blinker, daemon=True).start()
 
+        self.menuToggle.title = "Turn off"
         self.menuToggle.set_callback(callback=self.off_air)
         self.log("on_air() done")
 
@@ -61,6 +62,7 @@ class OnAir(object):
 
         self.menubar_blinker_active = False
 
+        self.menuToggle.title = "Turn on"
         self.menuToggle.set_callback(callback=self.on_air)
         self.log("off_air() done")
 
