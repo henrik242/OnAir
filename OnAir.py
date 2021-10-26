@@ -15,19 +15,22 @@ import rumps
 
 
 class OnAir(object):
-    menuAbout = "About OnAir…"
-    menuToggle = "Toggle light"
-    menuMqtt = "MQTT not connected"
 
     def __init__(self):
         self.app = rumps.App("OnAir", "⚪")
-        self.app.menu.add(rumps.MenuItem(title=self.menuMqtt))
-        self.app.menu.add(rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
-        self.app.menu.add(rumps.MenuItem(title=self.menuAbout, callback=self.open_onair_url))
+
+        self.menuMqtt = rumps.MenuItem("MQTT not connected")
+        self.app.menu.add(self.menuMqtt)
+
+        self.menuToggle = rumps.MenuItem("Toggle light", callback=self.on_air)
+        self.app.menu.add(self.menuToggle)
+
+        self.app.menu.add(rumps.MenuItem("About OnAir…", callback=self.open_onair_url))
+
         self.args = self.parse_args()
         self.mqtt_client = self.create_mqtt_client()
-        self.is_blinking = False
-        self.is_reading_log = True
+        self.menubar_blinker_active = False
+        self.camera_state_updater_active = True
 
     def run(self):
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
@@ -45,24 +48,26 @@ class OnAir(object):
     def on_air(self, callback_sender=None):
         self.log("on_air()")
         self.mqtt_publish("true")
-        self.is_blinking = True
+
+        self.menubar_blinker_active = True
         threading.Thread(target=self.menubar_blinker, daemon=True).start()
-        self.app.menu.pop(self.menuToggle)
-        self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title=self.menuToggle, callback=self.off_air))
+
+        self.menuToggle.set_callback(callback=self.off_air)
         self.log("on_air() done")
 
     def off_air(self, callback_sender=None):
         self.log("off_air()")
         self.mqtt_publish("false")
-        self.is_blinking = False
-        self.app.menu.pop(self.menuToggle)
-        self.app.menu.insert_before(self.menuAbout, rumps.MenuItem(title=self.menuToggle, callback=self.on_air))
+
+        self.menubar_blinker_active = False
+
+        self.menuToggle.set_callback(callback=self.on_air)
         self.log("off_air() done")
 
     def menubar_blinker(self):
         self.log("menubar_blinker()")
         green = True
-        while self.is_blinking:
+        while self.menubar_blinker_active:
             self.app.title = "🟢" if green else "⚪️"
             time.sleep(1)
             green = not green
@@ -71,16 +76,12 @@ class OnAir(object):
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            self.app.menu.pop(self.menuMqtt)
-            self.menuMqtt = "MQTT connected"
-            self.log(self.menuMqtt)
-            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title=self.menuMqtt))
+            self.menuMqtt.title = "MQTT connected"
+            self.log(self.menuMqtt.title)
         else:
-            self.app.menu.pop(self.menuMqtt)
-            msg = self.mqtt_err_code(rc)
-            self.menuMqtt = "MQTT not connected (error=%s, user=%s, host=%s)" % (msg, self.args.user, self.args.host)
-            self.log(self.menuMqtt)
-            self.app.menu.insert_before(self.menuToggle, rumps.MenuItem(title=self.menuMqtt))
+            self.menuMqtt.title = "MQTT not connected (error=%s, user=%s, host=%s)" % \
+                                  (self.mqtt_err_code(rc), self.args.user, self.args.host)
+            self.log(self.menuMqtt.title)
 
     @staticmethod
     def mqtt_err_code(code):
@@ -124,8 +125,8 @@ class OnAir(object):
         self.log("mqtt_publish() done: %s" % msg_info.is_published())
 
     def quit(self):
-        self.is_blinking = False
-        self.is_reading_log = False
+        self.menubar_blinker_active = False
+        self.camera_state_updater_active = False
         rumps.quit_application()
 
     def camera_state_updater(self):
@@ -134,7 +135,7 @@ class OnAir(object):
             """/usr/bin/log stream --predicate 'eventMessage contains "Post event kCameraStream"'""", 'r')
         cameras = dict()
 
-        while self.is_reading_log:
+        while self.camera_state_updater_active:
             item = log_stream.readline()
             self.log("reading '%s'" % item.strip())
 
