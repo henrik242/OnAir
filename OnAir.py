@@ -3,6 +3,7 @@
 import argparse
 import configparser
 import os
+import platform
 import re
 import shutil
 import threading
@@ -131,10 +132,18 @@ class OnAir(object):
         self.camera_state_updater_active = False
         rumps.quit_application()
 
+    @staticmethod
+    def big_sur_or_older():
+        return int(platform.mac_ver()[0][:2]) <= 11
+
     def camera_state_updater(self):
         self.log("camera_state_updater()")
-        log_stream = os.popen(
-            """/usr/bin/log stream --predicate 'eventMessage contains "Post event kCameraStream"'""", 'r')
+
+        predicate = 'eventMessage contains "Post event kCameraStream"' if self.big_sur_or_older() \
+            else 'subsystem == "com.apple.UVCExtension" and composedMessage contains "Post PowerLog"'
+        extraopts = '' if self.big_sur_or_older() else '--style ndjson'
+
+        log_stream = os.popen("""/usr/bin/log stream %s --predicate '%s'""" % (extraopts, predicate), 'r')
         cameras = dict()
 
         while self.camera_state_updater_active:
@@ -145,13 +154,16 @@ class OnAir(object):
                 self.log("log stream died")
                 break
 
-            match = re.search("guid:(.+)]", item)
+            searchexpr = "guid:(.+)]" if self.big_sur_or_older() \
+                else 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
+
+            match = re.search(searchexpr, item)
             if match is not None:
                 device = match.group(1)
 
-                if "Start" in item:
+                if "Start" in item or "= On;" in item:
                     cameras[device] = True
-                elif "Stop" in item:
+                elif "Stop" in item or "= Off;" in item:
                     cameras[device] = False
                 else:
                     self.log("Unknown activity: %s" % item)
