@@ -116,8 +116,7 @@ class OnAir(object):
 
     def mqtt_publish(self, state):
         self.log("mqtt_publish()")
-        if not self.mqtt_client.is_connected():
-            self.mqtt_client = self.create_mqtt_client()
+        self.mqtt_client = self.create_mqtt_client()  # Need to recreate client in case network has changed
 
         msg_info = self.mqtt_client.publish(self.args.topic, ("""{
           "serv": "out_bin_switch",
