@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import threading
 import time
 import webbrowser
@@ -16,7 +17,6 @@ import rumps
 
 
 class OnAir(object):
-
     def __init__(self):
         self.app = rumps.App("OnAir", "⚪")
 
@@ -82,8 +82,11 @@ class OnAir(object):
             self.menuMqtt.title = "MQTT connected"
             self.log(self.menuMqtt.title)
         else:
-            self.menuMqtt.title = "MQTT not connected (error=%s, user=%s, host=%s)" % \
-                                  (self.mqtt_err_code(rc), self.args.user, self.args.host)
+            self.menuMqtt.title = "MQTT not connected (error=%s, user=%s, host=%s)" % (
+                self.mqtt_err_code(rc),
+                self.args.user,
+                self.args.host,
+            )
             self.log(self.menuMqtt.title)
 
     @staticmethod
@@ -94,7 +97,7 @@ class OnAir(object):
             2: "invalid client identifier",
             3: "server unavailable",
             4: "bad username or password",
-            5: "not authorised"
+            5: "not authorised",
         }[code]
 
     def mqtt_on_publish(self, client, obj, msg):
@@ -110,24 +113,37 @@ class OnAir(object):
         client.username_pw_set(self.flatten(self.args.user), self.flatten(self.args.password))
         client.on_connect = self.mqtt_on_connect
         client.on_publish = self.mqtt_on_publish
-        client.connect(self.flatten(self.args.host), self.flatten(self.args.port))
-        client.loop_start()
+        try:
+            client.connect(self.flatten(self.args.host), self.flatten(self.args.port))
+            client.loop_start()
+        except socket.gaierror as err:
+            self.log("mqtt_publish() failed: %s" % err)
+
         return client
 
     def mqtt_publish(self, state):
         self.log("mqtt_publish()")
         self.mqtt_client = self.create_mqtt_client()  # Need to recreate client in case network has changed
 
-        msg_info = self.mqtt_client.publish(self.args.topic, ("""{
-          "serv": "out_bin_switch",
-          "type": "cmd.binary.set",
-          "val_t": "bool",
-          "val": %s,
-          "props": {},
-          "tags": null 
-        }""" % state))
+        try:
+            msg_info = self.mqtt_client.publish(
+                self.args.topic,
+                (
+                    """{
+              "serv": "out_bin_switch",
+              "type": "cmd.binary.set",
+              "val_t": "bool",
+              "val": %s,
+              "props": {},
+              "tags": null 
+            }"""
+                    % state
+                ),
+            )
 
-        self.log("mqtt_publish() done: %s" % msg_info.is_published())
+            self.log("mqtt_publish() done: %s" % msg_info.is_published())
+        except RuntimeError as err:
+            self.log("mqtt_publish() failed: %s" % err)
 
     def quit(self):
         self.menubar_blinker_active = False
@@ -141,23 +157,25 @@ class OnAir(object):
     def camera_state_updater(self):
         self.log("camera_state_updater()")
 
-        predicate = 'eventMessage contains "Post event kCameraStream"' if self.big_sur_or_older() \
+        predicate = (
+            'eventMessage contains "Post event kCameraStream"'
+            if self.big_sur_or_older()
             else 'subsystem == "com.apple.UVCExtension" and composedMessage contains "Post PowerLog"'
-        extraopts = '' if self.big_sur_or_older() else '--style ndjson'
+        )
+        extraopts = "" if self.big_sur_or_older() else "--style ndjson"
 
-        log_stream = os.popen("""/usr/bin/log stream %s --predicate '%s'""" % (extraopts, predicate), 'r')
+        log_stream = os.popen("""/usr/bin/log stream %s --predicate '%s'""" % (extraopts, predicate), "r")
         cameras = dict()
 
         while self.camera_state_updater_active:
             item = log_stream.readline()
             self.log("reading '%s'" % item.strip())
 
-            if item == '':
+            if item == "":
                 self.log("log stream died")
                 break
 
-            searchexpr = "guid:(.+)]" if self.big_sur_or_older() \
-                else 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
+            searchexpr = "guid:(.+)]" if self.big_sur_or_older() else 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
 
             match = re.search(searchexpr, item)
             if match is not None:
@@ -191,23 +209,23 @@ class OnAir(object):
         config = configparser.ConfigParser()
         config.read(homeconfig)
 
-        user = config.get('DEFAULT', 'user', fallback=None)
-        password = config.get('DEFAULT', 'password', fallback=None)
-        host = config.get('DEFAULT', 'host', fallback="futurehome-smarthub.local")
-        port = config.getint('DEFAULT', 'port', fallback=1884)
-        topic = config.get('DEFAULT', 'topic', fallback="pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0")
-        debug = config.getboolean('DEFAULT', 'debug', fallback=False)
+        user = config.get("DEFAULT", "user", fallback=None)
+        password = config.get("DEFAULT", "password", fallback=None)
+        host = config.get("DEFAULT", "host", fallback="futurehome-smarthub.local")
+        port = config.getint("DEFAULT", "port", fallback=1884)
+        topic = config.get("DEFAULT", "topic", fallback="pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0")
+        debug = config.getboolean("DEFAULT", "debug", fallback=False)
 
         parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('--host', nargs=1, help=" ", default=host)
-        parser.add_argument('--port', nargs=1, help=" ", type=int, default=port)
-        parser.add_argument('--topic', nargs=1, help=" ", default=topic)
-        parser.add_argument('--user', nargs=1, default=user)
-        parser.add_argument('--password', nargs=1, default=password)
-        parser.add_argument('--debug', action='store_true', help=" ", default=debug)
+        parser.add_argument("--host", nargs=1, help=" ", default=host)
+        parser.add_argument("--port", nargs=1, help=" ", type=int, default=port)
+        parser.add_argument("--topic", nargs=1, help=" ", default=topic)
+        parser.add_argument("--user", nargs=1, default=user)
+        parser.add_argument("--password", nargs=1, default=password)
+        parser.add_argument("--debug", action="store_true", help=" ", default=debug)
         return parser.parse_args()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = OnAir()
     app.run()
