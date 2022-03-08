@@ -130,13 +130,13 @@ class OnAir(object):
                 self.args.topic,
                 (
                     """{
-              "serv": "out_bin_switch",
-              "type": "cmd.binary.set",
-              "val_t": "bool",
-              "val": %s,
-              "props": {},
-              "tags": null 
-            }"""
+                        "serv": "out_bin_switch",
+                        "type": "cmd.binary.set",
+                        "val_t": "bool",
+                        "val": %s,
+                        "props": {},
+                        "tags": null 
+                    }"""
                     % state
                 ),
             )
