@@ -8,3 +8,6 @@ archive:
 
 clean:
 	rm -rf dist build
+
+format:
+	black -l 140 .
