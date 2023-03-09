@@ -15,6 +15,8 @@ from pathlib import Path
 import paho.mqtt.client as mqtt
 import rumps
 
+macos_version = int(platform.mac_ver()[0][:2])
+
 
 class OnAir(object):
     def __init__(self):
@@ -150,19 +152,26 @@ class OnAir(object):
         self.camera_state_updater_active = False
         rumps.quit_application()
 
-    @staticmethod
-    def big_sur_or_older():
-        return int(platform.mac_ver()[0][:2]) <= 11
-
     def camera_state_updater(self):
         self.log("camera_state_updater()")
 
-        predicate = (
-            'eventMessage contains "Post event kCameraStream"'
-            if self.big_sur_or_older()
-            else 'subsystem == "com.apple.UVCExtension" and composedMessage contains "Post PowerLog"'
-        )
-        extraopts = "" if self.big_sur_or_older() else "--style ndjson"
+        predicate = 'subsystem == "com.apple.UVCExtension" and composedMessage contains "Post PowerLog"'
+        extraopts = ""
+        searchexpr = "guid:(.+)]"
+        onitem = "Start"
+        offitem = "Stop"
+        if macos_version == 12:
+            predicate = 'eventMessage contains "Post event kCameraStream"'
+            extraopts = "--style ndjson"
+            searchexpr = 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
+            onitem = "= On;"
+            offitem = "= Off;"
+        if macos_version >= 13:
+            predicate = 'eventMessage contains "Cameras changed to"'
+            extraopts = "--style ndjson"
+            searchexpr = '"Cameras changed to (\[.*\])",'
+            onitem = "to [ControlCenter"
+            offitem = "to []"
 
         log_stream = os.popen("""/usr/bin/log stream %s --predicate '%s'""" % (extraopts, predicate), "r")
         cameras = dict()
@@ -175,15 +184,16 @@ class OnAir(object):
                 self.log("log stream died")
                 break
 
-            searchexpr = "guid:(.+)]" if self.big_sur_or_older() else 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
-
             match = re.search(searchexpr, item)
             if match is not None:
-                device = match.group(1)
+                if macos_version < 13:
+                    device = match.group(1)
+                else:
+                    device = "dummy"
 
-                if "Start" in item or "= On;" in item:
+                if onitem in item:
                     cameras[device] = True
-                elif "Stop" in item or "= Off;" in item:
+                elif offitem in item:
                     cameras[device] = False
                 else:
                     self.log("Unknown activity: %s" % item)
