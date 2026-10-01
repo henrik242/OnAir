@@ -2,10 +2,10 @@
 
 import argparse
 import configparser
+import ctypes
+import ctypes.util
 import json
 import os
-import platform
-import re
 import shutil
 import ssl
 import threading
@@ -17,9 +17,76 @@ from pathlib import Path
 
 import rumps
 
-macos_version = int(platform.mac_ver()[0].split(".")[0])
-
 HOMECONFIG = str(Path.home()) + "/.onair.ini"
+
+
+# --- camera usage via CoreMediaIO -------------------------------------------
+#
+# Ask CoreMediaIO whether any camera is in use by any process. This is reliable
+# across macOS versions and needs no camera permission, unlike scraping the
+# unified log, whose "Cameras changed to" message cannot distinguish on from off
+# on macOS 26+ (it lists the same cameras either way and never reports an empty
+# set when a camera is released).
+
+
+class _CMIOAddress(ctypes.Structure):
+    _fields_ = [
+        ("mSelector", ctypes.c_uint32),
+        ("mScope", ctypes.c_uint32),
+        ("mElement", ctypes.c_uint32),
+    ]
+
+
+def _fourcc(code):
+    return (ord(code[0]) << 24) | (ord(code[1]) << 16) | (ord(code[2]) << 8) | ord(code[3])
+
+
+_CMIO_SYSTEM_OBJECT = 1
+_CMIO_SCOPE_GLOBAL = _fourcc("glob")
+_CMIO_PROP_DEVICES = _fourcc("dev#")
+_CMIO_PROP_IS_RUNNING_SOMEWHERE = _fourcc("gone")
+
+_cmio_lib = None
+
+
+def _cmio():
+    global _cmio_lib
+    if _cmio_lib is None:
+        lib = ctypes.CDLL("/System/Library/Frameworks/CoreMediaIO.framework/CoreMediaIO")
+        ptr_addr = ctypes.POINTER(_CMIOAddress)
+        u32 = ctypes.c_uint32
+        pu32 = ctypes.POINTER(u32)
+        lib.CMIOObjectGetPropertyDataSize.argtypes = [u32, ptr_addr, u32, ctypes.c_void_p, pu32]
+        lib.CMIOObjectGetPropertyData.argtypes = [u32, ptr_addr, u32, ctypes.c_void_p, u32, pu32, ctypes.c_void_p]
+        _cmio_lib = lib
+    return _cmio_lib
+
+
+def _cmio_devices(lib):
+    addr = _CMIOAddress(_CMIO_PROP_DEVICES, _CMIO_SCOPE_GLOBAL, 0)
+    size = ctypes.c_uint32(0)
+    if lib.CMIOObjectGetPropertyDataSize(_CMIO_SYSTEM_OBJECT, ctypes.byref(addr), 0, None, ctypes.byref(size)) != 0:
+        return []
+    count = size.value // ctypes.sizeof(ctypes.c_uint32)
+    if count == 0:
+        return []
+    ids = (ctypes.c_uint32 * count)()
+    used = ctypes.c_uint32(0)
+    if lib.CMIOObjectGetPropertyData(_CMIO_SYSTEM_OBJECT, ctypes.byref(addr), 0, None, size, ctypes.byref(used), ids) != 0:
+        return []
+    return list(ids)
+
+
+def any_camera_in_use():
+    lib = _cmio()
+    addr = _CMIOAddress(_CMIO_PROP_IS_RUNNING_SOMEWHERE, _CMIO_SCOPE_GLOBAL, 0)
+    for device in _cmio_devices(lib):
+        value = ctypes.c_uint32(0)
+        used = ctypes.c_uint32(0)
+        status = lib.CMIOObjectGetPropertyData(device, ctypes.byref(addr), 0, None, 4, ctypes.byref(used), ctypes.byref(value))
+        if status == 0 and value.value:
+            return True
+    return False
 
 
 class OnAir(object):
@@ -29,7 +96,10 @@ class OnAir(object):
         self.menubar_blinker_active = False
         self.camera_state_updater_active = True
 
-        self.app = rumps.App("OnAir", "⚪")
+        # Show the "On Air" logo in the menubar. template=True renders it
+        # monochrome (dimmed) when idle; the blinker flips it to full-colour red
+        # while a camera is on, like a real on-air sign lighting up.
+        self.app = rumps.App("OnAir", icon="onair.png", template=True)
 
         self.menuStatus = rumps.MenuItem("Homey: not configured")
         self.menuToggle = rumps.MenuItem("Turn on", callback=self.on_air)
@@ -98,12 +168,13 @@ class OnAir(object):
 
     def menubar_blinker(self):
         self.log("menubar_blinker()")
-        green = True
+        lit = True
         while self.menubar_blinker_active:
-            self.app.title = "🟢" if green else "⚪️"
+            # template=False shows the red logo, template=True dims it to monochrome
+            self.app.template = not lit
             time.sleep(1)
-            green = not green
-        self.app.title = "⚪"
+            lit = not lit
+        self.app.template = True
         self.log("menubar_blinker() done")
 
     # --- Homey local API ------------------------------------------------------
@@ -220,8 +291,22 @@ class OnAir(object):
             self.log("discovered Homey at %s" % address)
             self.refresh_lights()
         else:
-            self.menuStatus.title = "Homey: not found (use Set Homey address…)"
+            self.menuStatus.title = "Homey: not found"
             self.log("no Homey found on network")
+        # NSAlert must run on the main thread.
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(self._detect_alert, address)
+
+    @staticmethod
+    def _detect_alert(address):
+        if address:
+            rumps.alert(title="OnAir", message="Found Homey at\n%s" % address)
+        else:
+            rumps.alert(
+                title="OnAir",
+                message="No Homey found on the network.\nUse 'Set Homey address…' to enter it manually.",
+            )
 
     def set_address(self, _=None):
         response = rumps.Window(
@@ -319,68 +404,19 @@ class OnAir(object):
         for name, devid in devices:
             print("%-28s  %s" % (devid, name))
 
-    def quit(self):
-        self.menubar_blinker_active = False
-        self.camera_state_updater_active = False
-        rumps.quit_application()
-
     def camera_state_updater(self):
-        self.log("camera_state_updater()")
-
-        predicate = 'subsystem == "com.apple.UVCExtension" and composedMessage contains "Post PowerLog"'
-        extraopts = ""
-        searchexpr = "guid:(.+)]"
-        onitem = "Start"
-        offitem = "Stop"
-        if macos_version == 12:
-            predicate = 'eventMessage contains "Post event kCameraStream"'
-            extraopts = "--style ndjson"
-            searchexpr = 'VDCAssistant_Device_GUID\\\\" = \\\\"(.+)\\\\";'
-            onitem = "= On;"
-            offitem = "= Off;"
-        if macos_version >= 13:
-            predicate = 'eventMessage contains "Cameras changed to"'
-            extraopts = "--style ndjson"
-            # The message lists every camera and can be long enough that the unified
-            # log truncates it with "<…>", so don't require the closing bracket here.
-            searchexpr = r"Cameras changed to (\[.*)"
-            onitem = "to [ControlCenter"
-            offitem = "to []"
-
-        log_stream = os.popen("""/usr/bin/log stream %s --predicate '%s'""" % (extraopts, predicate), "r")
-        cameras = dict()
-
+        self.log("camera_state_updater() polling CoreMediaIO")
         while self.camera_state_updater_active:
-            item = log_stream.readline()
-            self.log("reading '%s'" % item.strip())
-
-            if item == "":
-                self.log("log stream died")
-                break
-
-            match = re.search(searchexpr, item)
-            if match is not None:
-                if macos_version < 13:
-                    device = match.group(1)
-                else:
-                    device = "dummy"
-
-                if onitem in item:
-                    cameras[device] = True
-                elif offitem in item:
-                    cameras[device] = False
-                else:
-                    self.log("Unknown activity: %s" % item)
-
-                self.log(cameras)
-                if any(cameras.values()):
-                    self.log("Camera %s is on" % device)
-                    self.on_air()
-                else:
-                    self.log("Camera %s is off" % device)
-                    self.off_air()
-
-        self.quit()
+            try:
+                in_use = any_camera_in_use()
+            except OSError as err:
+                self.log("camera poll failed: %s" % err)
+                in_use = self.air_on
+            if in_use:
+                self.on_air()
+            else:
+                self.off_air()
+            time.sleep(1)
 
     @staticmethod
     def parse_args():
