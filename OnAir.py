@@ -419,16 +419,21 @@ class OnAir(object):
 
     def camera_state_updater(self):
         self.log("camera_state_updater() polling CoreMediaIO")
+        # Only act on camera state *changes*, so a manual toggle from the menu is
+        # not clobbered on the next poll when no camera is in use.
+        previous = None
         while self.camera_state_updater_active:
             try:
                 in_use = any_camera_in_use()
             except OSError as err:
                 self.log("camera poll failed: %s" % err)
-                in_use = self.air_on
-            if in_use:
-                self.on_air()
-            else:
-                self.off_air()
+                in_use = previous
+            if in_use != previous:
+                previous = in_use
+                if in_use:
+                    self.on_air()
+                else:
+                    self.off_air()
             time.sleep(1)
 
     @staticmethod
