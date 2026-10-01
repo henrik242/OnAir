@@ -19,6 +19,13 @@ import rumps
 
 HOMECONFIG = str(Path.home()) + "/.onair.ini"
 
+# Idle icon is a transparent "On Air" silhouette shown as a template (recoloured
+# to match the menubar). Active icon is the full-colour red logo. The colour logo
+# cannot be used as a template because its background is opaque, which would mask
+# to a solid square.
+ICON_IDLE = "onair-template.png"
+ICON_ACTIVE = "onair.png"
+
 
 # --- camera usage via CoreMediaIO -------------------------------------------
 #
@@ -96,10 +103,9 @@ class OnAir(object):
         self.menubar_blinker_active = False
         self.camera_state_updater_active = True
 
-        # Show the "On Air" logo in the menubar. template=True renders it
-        # monochrome (dimmed) when idle; the blinker flips it to full-colour red
-        # while a camera is on, like a real on-air sign lighting up.
-        self.app = rumps.App("OnAir", icon="onair.png", template=True)
+        # Monochrome "On Air" silhouette when idle; the blinker flips to the
+        # full-colour red logo while a camera is on, like an on-air sign lighting up.
+        self.app = rumps.App("OnAir", icon=ICON_IDLE, template=True)
 
         self.menuStatus = rumps.MenuItem("Homey: not configured")
         self.menuToggle = rumps.MenuItem("Turn on", callback=self.on_air)
@@ -166,15 +172,22 @@ class OnAir(object):
         self.menuToggle.set_callback(callback=self.on_air)
         self.log("off_air() done")
 
+    def _show_idle_icon(self):
+        self.app.template = True
+        self.app.icon = ICON_IDLE
+
+    def _show_active_icon(self):
+        self.app.template = False
+        self.app.icon = ICON_ACTIVE
+
     def menubar_blinker(self):
         self.log("menubar_blinker()")
         lit = True
         while self.menubar_blinker_active:
-            # template=False shows the red logo, template=True dims it to monochrome
-            self.app.template = not lit
+            self._show_active_icon() if lit else self._show_idle_icon()
             time.sleep(1)
             lit = not lit
-        self.app.template = True
+        self._show_idle_icon()
         self.log("menubar_blinker() done")
 
     # --- Homey local API ------------------------------------------------------
