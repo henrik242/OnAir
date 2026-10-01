@@ -8,7 +8,7 @@ OPTIONS = {
     "argv_emulation": True,
     "iconfile": "onair.icns",
     "plist": {
-        "CFBundleShortVersionString": "2.0.0",
+        "CFBundleShortVersionString": "3.0.0",
         "LSUIElement": True,
     },
     "packages": ["rumps", "zeroconf", "ifaddr"],
