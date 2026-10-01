@@ -14,7 +14,7 @@ roundtrip.
 Install
 --
 Download the latest build from
-<https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>,
+<https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz>,
 unpack it, and move `OnAir.app` to `/Applications`. Or build from source (below).
 
 Setup
