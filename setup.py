@@ -8,7 +8,7 @@ OPTIONS = {
     "argv_emulation": True,
     "iconfile": "onair.icns",
     "plist": {
-        "CFBundleShortVersionString": "3.0.1",
+        "CFBundleShortVersionString": "3.0.2",
         "LSUIElement": True,
         "NSLocalNetworkUsageDescription": "OnAir looks for your Homey Pro on the local network.",
         "NSBonjourServices": ["_homey._tcp"],
