@@ -13,9 +13,13 @@ roundtrip.
 
 Install
 --
-Download the latest build from
-<https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz>,
-unpack it, and move `OnAir.app` to `/Applications`. Or build from source (below).
+Install with [Homebrew](https://brew.sh/):
+
+```
+brew install --cask henrik242/brew/onair
+```
+
+Or build from source (below).
 
 Setup
 --
