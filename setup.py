@@ -24,6 +24,6 @@ OPTIONS = {
 setup(
     app=APP,
     name="OnAir",
-    data_files=DATA_FILES,
+    data_files=DATA_FILES,  # type: ignore[arg-type]  # py2app accepts a flat file list
     options={"py2app": OPTIONS},
 )

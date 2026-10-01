@@ -1,0 +1,17 @@
+{
+  "include": [
+    "OnAir.py",
+    "setup.py"
+  ],
+  "exclude": [
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": false
+}

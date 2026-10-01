@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import argparse
 import configparser
 import ctypes
@@ -14,6 +16,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 import objc
 import rumps
@@ -62,7 +65,7 @@ class _CMIOAddress(ctypes.Structure):
     ]
 
 
-def _fourcc(code):
+def _fourcc(code: str) -> int:
     return (ord(code[0]) << 24) | (ord(code[1]) << 16) | (ord(code[2]) << 8) | ord(code[3])
 
 
@@ -71,10 +74,10 @@ _CMIO_SCOPE_GLOBAL = _fourcc("glob")
 _CMIO_PROP_DEVICES = _fourcc("dev#")
 _CMIO_PROP_IS_RUNNING_SOMEWHERE = _fourcc("gone")
 
-_cmio_lib = None
+_cmio_lib: ctypes.CDLL | None = None
 
 
-def _cmio():
+def _cmio() -> ctypes.CDLL:
     global _cmio_lib
     if _cmio_lib is None:
         lib = ctypes.CDLL("/System/Library/Frameworks/CoreMediaIO.framework/CoreMediaIO")
@@ -87,7 +90,7 @@ def _cmio():
     return _cmio_lib
 
 
-def _cmio_devices(lib):
+def _cmio_devices(lib: ctypes.CDLL) -> list[int]:
     addr = _CMIOAddress(_CMIO_PROP_DEVICES, _CMIO_SCOPE_GLOBAL, 0)
     size = ctypes.c_uint32(0)
     if lib.CMIOObjectGetPropertyDataSize(_CMIO_SYSTEM_OBJECT, ctypes.byref(addr), 0, None, ctypes.byref(size)) != 0:
@@ -102,7 +105,7 @@ def _cmio_devices(lib):
     return list(ids)
 
 
-def any_camera_in_use():
+def any_camera_in_use() -> bool:
     lib = _cmio()
     addr = _CMIOAddress(_CMIO_PROP_IS_RUNNING_SOMEWHERE, _CMIO_SCOPE_GLOBAL, 0)
     for device in _cmio_devices(lib):
@@ -127,7 +130,7 @@ class SettingsDialog(NSObject):
     WIDTH = 460
 
     @objc.python_method
-    def show(self, onair):
+    def show(self, onair: OnAir) -> tuple[str, str, Any] | None:
         """Run the dialog. Returns (address, token, device) on Save, else None."""
         self.onair = onair
         self.generation = 0  # bumped per lights fetch, so stale results are dropped
@@ -136,19 +139,19 @@ class SettingsDialog(NSObject):
         width = self.WIDTH
         view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, 130))
 
-        def label(text, y):
+        def label(text: str, y: float) -> None:
             field = NSTextField.labelWithString_(text)
             field.setFrame_(NSMakeRect(0, y + 3, 64, 18))
             field.setAlignment_(NSTextAlignmentRight)
             view.addSubview_(field)
 
-        def button(title, action, y):
+        def button(title: str, action: str, y: float) -> Any:
             btn = NSButton.buttonWithTitle_target_action_(title, self, action)
             btn.setFrame_(NSMakeRect(width - 92, y - 4, 92, 32))
             view.addSubview_(btn)
             return btn
 
-        def text_field(value, placeholder, y, w):
+        def text_field(value: str | None, placeholder: str, y: float, w: float) -> Any:
             field = Editing.alloc().initWithFrame_(NSMakeRect(72, y, w, 24))
             field.setStringValue_(value or "")
             field.setPlaceholderString_(placeholder)
@@ -198,25 +201,25 @@ class SettingsDialog(NSObject):
 
     # --- actions --------------------------------------------------------------
 
-    def detect_(self, sender):
+    def detect_(self, sender: Any) -> None:
         self.detect_button.setEnabled_(False)
         self.status.setStringValue_("Searching the network for a Homey…")
 
-        def worker():
+        def worker() -> None:
             AppHelper.callAfter(self._detected, OnAir.discover_homey())
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def reload_(self, sender):
+    def reload_(self, sender: Any) -> None:
         self._load_lights(force=True)
 
-    def controlTextDidEndEditing_(self, notification):
+    def controlTextDidEndEditing_(self, notification: Any) -> None:
         self._load_lights()
 
     # --- helpers --------------------------------------------------------------
 
     @objc.python_method
-    def _detected(self, address):
+    def _detected(self, address: str | None) -> None:
         self.detect_button.setEnabled_(True)
         if address:
             self.address.setStringValue_(address)
@@ -226,7 +229,7 @@ class SettingsDialog(NSObject):
             self.status.setStringValue_("No Homey found. Enter its address manually.")
 
     @objc.python_method
-    def _load_lights(self, force=False):
+    def _load_lights(self, force: bool = False) -> None:
         address = self.address.stringValue().strip()
         token = self.token.stringValue().strip()
         if not (address and token):
@@ -240,7 +243,7 @@ class SettingsDialog(NSObject):
         generation = self.generation
         self._set_lights([], "Loading lights…")
 
-        def worker():
+        def worker() -> None:
             try:
                 devices, error = self.onair.homey_onoff_devices(address, token), None
             except (urllib.error.URLError, OSError, ValueError) as err:
@@ -250,7 +253,12 @@ class SettingsDialog(NSObject):
         threading.Thread(target=worker, daemon=True).start()
 
     @objc.python_method
-    def _lights_loaded(self, generation, devices, error):
+    def _lights_loaded(
+        self,
+        generation: int,
+        devices: list[tuple[str, str]] | None,
+        error: Exception | None,
+    ) -> None:
         if generation != self.generation:
             return
         if error is not None:
@@ -263,7 +271,7 @@ class SettingsDialog(NSObject):
             self.status.setStringValue_("")
 
     @objc.python_method
-    def _set_lights(self, devices, placeholder=None):
+    def _set_lights(self, devices: list[tuple[str, str]], placeholder: str | None = None) -> None:
         current = self.light.selectedItem()
         selected = current.representedObject() if current is not None else None
         selected = selected or self.onair.args.device
@@ -285,7 +293,7 @@ class SettingsDialog(NSObject):
 
 
 class OnAir(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self.args = self.parse_args()
         self.air_on = False
         self.menubar_blinker_active = False
@@ -311,22 +319,22 @@ class OnAir(object):
 
         self.update_status()
 
-    def run(self):
+    def run(self) -> None:
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
         self.log(str(self.args))
         self.app.run()
 
-    def log(self, msg):
+    def log(self, msg: object) -> None:
         if self.args.debug:
             print("%s" % msg)
 
     @staticmethod
-    def open_onair_url(callback_sender=None):
+    def open_onair_url(callback_sender: Any = None) -> None:
         webbrowser.open_new_tab("https://github.com/henrik242/OnAir")
 
     # --- camera / light state -------------------------------------------------
 
-    def on_air(self, callback_sender=None):
+    def on_air(self, callback_sender: Any = None) -> None:
         if self.air_on:
             return
         self.air_on = True
@@ -340,7 +348,7 @@ class OnAir(object):
         self.menuToggle.set_callback(callback=self.off_air)
         self.log("on_air() done")
 
-    def off_air(self, callback_sender=None):
+    def off_air(self, callback_sender: Any = None) -> None:
         if not self.air_on:
             return
         self.air_on = False
@@ -353,15 +361,15 @@ class OnAir(object):
         self.menuToggle.set_callback(callback=self.on_air)
         self.log("off_air() done")
 
-    def _show_idle_icon(self):
+    def _show_idle_icon(self) -> None:
         self.app.template = True
         self.app.icon = ICON_IDLE
 
-    def _show_active_icon(self):
+    def _show_active_icon(self) -> None:
         self.app.template = False
         self.app.icon = ICON_ACTIVE
 
-    def menubar_blinker(self):
+    def menubar_blinker(self) -> None:
         self.log("menubar_blinker()")
         lit = True
         while self.menubar_blinker_active:
@@ -373,14 +381,21 @@ class OnAir(object):
 
     # --- Homey local API ------------------------------------------------------
 
-    def homey_configured(self):
+    def homey_configured(self) -> bool:
         return bool(self.args.address and self.args.token and self.args.device)
 
-    def homey_request(self, path, method="GET", body=None, address=None, token=None):
-        address = address or self.args.address
-        if "://" not in address:
-            address = "http://" + address
-        url = address.rstrip("/") + path
+    def homey_request(
+        self,
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        address: str | None = None,
+        token: str | None = None,
+    ) -> Any:
+        host = address or self.args.address or ""
+        if "://" not in host:
+            host = "http://" + host
+        url = host.rstrip("/") + path
         headers = {"Authorization": "Bearer %s" % (token or self.args.token)}
         data = None
         if body is not None:
@@ -394,7 +409,7 @@ class OnAir(object):
             payload = resp.read().decode("utf-8")
             return json.loads(payload) if payload else None
 
-    def homey_set(self, on):
+    def homey_set(self, on: bool) -> None:
         self.log("homey_set(%s)" % on)
         if not self.homey_configured():
             self.update_status()
@@ -412,10 +427,10 @@ class OnAir(object):
             self.menuStatus.title = "Homey: error (%s)" % err
             self.log("homey_set() failed: %s" % err)
 
-    def homey_onoff_devices(self, address=None, token=None):
+    def homey_onoff_devices(self, address: str | None = None, token: str | None = None) -> list[tuple[str, str]]:
         """Return a sorted list of (name, device_id) for devices with an onoff capability."""
         devices = self.homey_request("/api/manager/devices/device/", address=address, token=token)
-        found = []
+        found: list[tuple[str, str]] = []
         for devid, dev in (devices or {}).items():
             if "onoff" in dev.get("capabilities", []):
                 found.append((dev.get("name", "") or devid, devid))
@@ -424,7 +439,7 @@ class OnAir(object):
     # --- network discovery ----------------------------------------------------
 
     @classmethod
-    def discover_homey(cls, timeout=20, attempt_timeout=5):
+    def discover_homey(cls, timeout: float = 20, attempt_timeout: float = 5) -> str | None:
         """Find a Homey Pro via mDNS (_homey._tcp) and return its address, or None.
 
         Prefers the advertised hostname (homey-<id>.local), which stays valid
@@ -446,23 +461,23 @@ class OnAir(object):
                 return address
 
     @staticmethod
-    def _discover_homey_once(timeout):
-        from zeroconf import ServiceBrowser, Zeroconf
+    def _discover_homey_once(timeout: float) -> str | None:
+        from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-        class _Listener:
-            def __init__(self):
-                self.name = None
-                self.type = None
+        class _Listener(ServiceListener):
+            def __init__(self) -> None:
+                self.name: str | None = None
+                self.type: str | None = None
                 self.found = threading.Event()
 
-            def add_service(self, zc, type_, name):
+            def add_service(self, zc: Any, type_: str, name: str) -> None:
                 self.type, self.name = type_, name
                 self.found.set()
 
-            def update_service(self, zc, type_, name):
+            def update_service(self, zc: Any, type_: str, name: str) -> None:
                 pass
 
-            def remove_service(self, zc, type_, name):
+            def remove_service(self, zc: Any, type_: str, name: str) -> None:
                 pass
 
         zeroconf = Zeroconf()
@@ -471,7 +486,10 @@ class OnAir(object):
             ServiceBrowser(zeroconf, "_homey._tcp.local.", listener)
             if not listener.found.wait(timeout):
                 return None
-            info = zeroconf.get_service_info(listener.type, listener.name, timeout=int(timeout * 1000))
+            service_type, service_name = listener.type, listener.name
+            if service_type is None or service_name is None:
+                return None
+            info = zeroconf.get_service_info(service_type, service_name, timeout=int(timeout * 1000))
         finally:
             zeroconf.close()
 
@@ -487,7 +505,7 @@ class OnAir(object):
 
     # --- menu actions ---------------------------------------------------------
 
-    def open_settings(self, _=None):
+    def open_settings(self, _: Any = None) -> None:
         result = SettingsDialog.alloc().init().show(self)
         if result is None:
             return
@@ -500,7 +518,7 @@ class OnAir(object):
         self.log("saved settings: address=%s device=%s" % (address, self.args.device))
         self.update_status()
 
-    def update_status(self):
+    def update_status(self) -> None:
         if self.homey_configured():
             self.menuStatus.title = "Homey: ready (%s)" % self.args.address
         elif not self.args.address:
@@ -510,7 +528,7 @@ class OnAir(object):
         else:
             self.menuStatus.title = "Homey: choose a light"
 
-    def save_config(self):
+    def save_config(self) -> None:
         config = configparser.ConfigParser()
         config.read(HOMECONFIG)
         config["DEFAULT"]["address"] = self.args.address or ""
@@ -521,7 +539,7 @@ class OnAir(object):
             config.write(handle)
         self.log("saved config to %s" % HOMECONFIG)
 
-    def list_devices(self):
+    def list_devices(self) -> None:
         if not (self.args.address and self.args.token):
             print("Set address and token in ~/.onair.ini (or pass --address/--token) first.")
             return
@@ -534,11 +552,11 @@ class OnAir(object):
         for name, devid in devices:
             print("%-28s  %s" % (devid, name))
 
-    def camera_state_updater(self):
+    def camera_state_updater(self) -> None:
         self.log("camera_state_updater() polling CoreMediaIO")
         # Only act on camera state *changes*, so a manual toggle from the menu is
         # not clobbered on the next poll when no camera is in use.
-        previous = None
+        previous: bool | None = None
         while self.camera_state_updater_active:
             try:
                 in_use = any_camera_in_use()
@@ -554,7 +572,7 @@ class OnAir(object):
             time.sleep(1)
 
     @staticmethod
-    def parse_args():
+    def parse_args() -> argparse.Namespace:
         appconfig = ".onair.ini"
 
         if not os.path.isfile(HOMECONFIG):

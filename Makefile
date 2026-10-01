@@ -1,7 +1,7 @@
 VENV := .venv
 PYTHON := $(VENV)/bin/python
 
-default: $(VENV)
+default: $(VENV) typecheck
 	$(PYTHON) setup.py py2app
 
 # Create the build virtualenv and install deps into it. Using a venv avoids
@@ -30,4 +30,8 @@ format: $(VENV)
 	$(PYTHON) -m pip install black
 	$(PYTHON) -m black -l 140 .
 
-.PHONY: default run debug archive clean format
+typecheck: $(VENV)
+	$(PYTHON) -m pip install pyright
+	$(PYTHON) -m pyright
+
+.PHONY: default run debug archive clean format typecheck
