@@ -3,75 +3,52 @@
 OnAir status indicator for macOS camera usage
 ==
 
-Using a menubar indicator, and a MQTT message for Futurehome to turn on/off a light bulb
+A menubar indicator that watches macOS camera usage and turns a light on/off
+through your [Athom Homey Pro](https://homey.app/) using its local HTTP API.
 
 ```
-usage: OnAir.py [-h] [--host HOST] [--port PORT] [--topic TOPIC] [--user USER] [--password PASSWORD] [--debug]
+usage: OnAir.py [-h] [--address ADDRESS] [--token TOKEN] [--device DEVICE] [--list-devices] [--debug]
 
-optional arguments:
-  -h, --help           show this help message and exit
-  --host HOST          (default: futurehome-smarthub.local)
-  --port PORT          (default: 1884)
-  --topic TOPIC        (default: pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0)
-  --user USER
-  --password PASSWORD
-  --debug              (default: False)
+options:
+  -h, --help         show this help message and exit
+  --address ADDRESS  Homey Pro local IP or hostname
+  --token TOKEN      Homey Personal Access Token
+  --device DEVICE    Homey device id of the light
+  --list-devices     List on/off devices and exit
+  --debug
 ```
 
 Configuration
 --
-`~/.onair.ini` is used for MQTT configuration. It will be created automatically on the first run. Here's an example:
+`~/.onair.ini` holds the Homey settings. It is created automatically on the
+first run from the bundled template. Example:
 ```
 [DEFAULT]
-user=myuser
-password=mypass
-host=futurehome-smarthub.local
-port=1884
-topic=pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0
+address=192.168.1.42
+token=your-personal-access-token
+device=abcd1234-5678-90ab-cdef-1234567890ab
 debug=False
 ```
-See
-<https://support.futurehome.no/hc/en-no/articles/360033256491-Local-API-access-over-MQTT-Beta-> for MQTT user/password setup.
 
-Releases
+Setup
 --
-Fetch the latest app build from <https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>
+1. Find your Homey Pro's IP address (Homey app -> Settings -> General, or your
+   router). Put it in `address`.
+2. Create a Personal Access Token at <https://my.homey.app> (Settings -> API
+   keys). Put it in `token`.
+3. List the devices that have an on/off capability and pick your light's id:
+   ```
+   ./OnAir.py --list-devices
+   ```
+   Put the id in `device`.
 
+That's it. When any camera turns on, OnAir turns the light on (and blinks the
+menubar icon); when all cameras are off, it turns the light off. You can also
+toggle it manually from the menubar.
 
-Futurehome and MQTT testing
---
-Go to <http://futurehome-smarthub.local:8081/fimp/timeline> and set the Service filter to `out_bin_switch`.
-Turn off/on your desired light to discover the topic for it, e.g. `pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0`,
-and the actual message, e.g.
-```
-{
-    "serv": "out_bin_switch",
-    "type": "cmd.binary.set",
-    "val_t": "bool",
-    "val": true,
-    "props": null,
-    "tags": null
-}
-```
-
-Use a MQTT client such as [mqtt-cli](https://github.com/hivemq/mqtt-cli) or [MQTT Explorer](http://mqtt-explorer.com/)
-to send a message to turn the light on or off (`val` set to `true` or `false`). 
-Note that the MQTT version 5 doesn't work, it needs to be v3.
-
-Here's an example from mqtt-cli:
-```
-$ mqtt pub -v -V 3 -h futurehome-smarthub.local -p 1884 \
-       -u my_username -pw my_password \
-       -t pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0 \
-       -m '{
-            "serv": "out_bin_switch",
-            "type": "cmd.binary.set",
-            "val_t": "bool",
-            "val": true,
-            "props": null,
-            "tags": null
-        }'
-```
+The app talks to Homey directly on your LAN over
+`PUT http://<address>/api/manager/devices/device/<device>/capability/onoff`,
+so there is no cloud roundtrip and no extra dependencies beyond `rumps`.
 
 Building the app
 --
@@ -83,11 +60,13 @@ pip3 install -r requirements.txt
 
 This creates OnAir.app in `dist/`
 
+Releases
+--
+Fetch the latest app build from <https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>
+
 Thanks to
 --
 
 - <https://github.com/jaredks/rumps>
 - <https://github.com/ronaldoussoren/py2app>
 - <https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/>
-- <https://www.hivemq.com/blog/mqtt-client-library-paho-python/>
-

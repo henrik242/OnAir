@@ -2,28 +2,30 @@
 
 import argparse
 import configparser
+import json
 import os
 import platform
 import re
 import shutil
-import socket
+import ssl
 import threading
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 
-import paho.mqtt.client as mqtt
 import rumps
 
-macos_version = int(platform.mac_ver()[0][:2])
+macos_version = int(platform.mac_ver()[0].split(".")[0])
 
 
 class OnAir(object):
     def __init__(self):
         self.app = rumps.App("OnAir", "⚪")
 
-        self.menuMqtt = rumps.MenuItem("MQTT not connected")
-        self.app.menu.add(self.menuMqtt)
+        self.menuStatus = rumps.MenuItem("Homey: not configured")
+        self.app.menu.add(self.menuStatus)
 
         self.menuToggle = rumps.MenuItem("Turn on", callback=self.on_air)
         self.app.menu.add(self.menuToggle)
@@ -31,9 +33,12 @@ class OnAir(object):
         self.app.menu.add(rumps.MenuItem("About OnAir…", callback=self.open_onair_url))
 
         self.args = self.parse_args()
-        self.mqtt_client = self.create_mqtt_client()
+        self.air_on = False
         self.menubar_blinker_active = False
         self.camera_state_updater_active = True
+
+        if self.homey_configured():
+            self.menuStatus.title = "Homey: ready"
 
     def run(self):
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
@@ -49,8 +54,11 @@ class OnAir(object):
         webbrowser.open_new_tab("https://github.com/henrik242/OnAir")
 
     def on_air(self, callback_sender=None):
+        if self.air_on:
+            return
+        self.air_on = True
         self.log("on_air()")
-        self.mqtt_publish("true")
+        self.homey_set(True)
 
         self.menubar_blinker_active = True
         threading.Thread(target=self.menubar_blinker, daemon=True).start()
@@ -60,8 +68,11 @@ class OnAir(object):
         self.log("on_air() done")
 
     def off_air(self, callback_sender=None):
+        if not self.air_on:
+            return
+        self.air_on = False
         self.log("off_air()")
-        self.mqtt_publish("false")
+        self.homey_set(False)
 
         self.menubar_blinker_active = False
 
@@ -79,73 +90,58 @@ class OnAir(object):
         self.app.title = "⚪"
         self.log("menubar_blinker() done")
 
-    def mqtt_on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
-            self.menuMqtt.title = "MQTT connected"
-            self.log(self.menuMqtt.title)
-        else:
-            self.menuMqtt.title = "MQTT not connected (error=%s, user=%s, host=%s)" % (
-                self.mqtt_err_code(rc),
-                self.args.user,
-                self.args.host,
-            )
-            self.log(self.menuMqtt.title)
+    def homey_configured(self):
+        return bool(self.args.address and self.args.token and self.args.device)
 
-    @staticmethod
-    def mqtt_err_code(code):
-        return {
-            0: "connection successful",
-            1: "incorrect protocol version",
-            2: "invalid client identifier",
-            3: "server unavailable",
-            4: "bad username or password",
-            5: "not authorised",
-        }[code]
+    def homey_request(self, path, method="GET", body=None):
+        address = self.args.address
+        if "://" not in address:
+            address = "http://" + address
+        url = address.rstrip("/") + path
+        headers = {"Authorization": "Bearer %s" % self.args.token}
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        # Homey Pro's local HTTPS uses a self-signed cert; the Bearer token is the
+        # real authentication, so skip cert verification when talking to it directly.
+        context = ssl._create_unverified_context() if url.startswith("https") else None
+        with urllib.request.urlopen(req, timeout=5, context=context) as resp:
+            payload = resp.read().decode("utf-8")
+            return json.loads(payload) if payload else None
 
-    def mqtt_on_publish(self, client, obj, msg):
-        self.log("publish: %s" % str(msg))
-
-    @staticmethod
-    def flatten(obj):
-        return obj[0] if type(obj) is list else obj
-
-    def create_mqtt_client(self):
-        self.log("create_mqtt_client()")
-        client = mqtt.Client(protocol=mqtt.MQTTv31)
-        client.username_pw_set(self.flatten(self.args.user), self.flatten(self.args.password))
-        client.on_connect = self.mqtt_on_connect
-        client.on_publish = self.mqtt_on_publish
+    def homey_set(self, on):
+        self.log("homey_set(%s)" % on)
+        if not self.homey_configured():
+            self.menuStatus.title = "Homey: not configured"
+            self.log("homey_set() skipped: missing address/token/device")
+            return
         try:
-            client.connect(self.flatten(self.args.host), self.flatten(self.args.port))
-            client.loop_start()
-        except socket.gaierror as err:
-            self.log("mqtt_publish() failed: %s" % err)
-
-        return client
-
-    def mqtt_publish(self, state):
-        self.log("mqtt_publish()")
-        self.mqtt_client = self.create_mqtt_client()  # Need to recreate client in case network has changed
-
-        try:
-            msg_info = self.mqtt_client.publish(
-                self.args.topic,
-                (
-                    """{
-                        "serv": "out_bin_switch",
-                        "type": "cmd.binary.set",
-                        "val_t": "bool",
-                        "val": %s,
-                        "props": {},
-                        "tags": null 
-                    }"""
-                    % state
-                ),
+            self.homey_request(
+                "/api/manager/devices/device/%s/capability/onoff" % self.args.device,
+                method="PUT",
+                body={"value": bool(on)},
             )
+            self.menuStatus.title = "Homey: connected"
+            self.log("homey_set() done")
+        except (urllib.error.URLError, OSError, ValueError) as err:
+            self.menuStatus.title = "Homey: error (%s)" % err
+            self.log("homey_set() failed: %s" % err)
 
-            self.log("mqtt_publish() done: %s" % msg_info.is_published())
-        except RuntimeError as err:
-            self.log("mqtt_publish() failed: %s" % err)
+    def list_devices(self):
+        if not (self.args.address and self.args.token):
+            print("Set address and token in ~/.onair.ini (or pass --address/--token) first.")
+            return
+        try:
+            devices = self.homey_request("/api/manager/devices/device/")
+        except (urllib.error.URLError, OSError, ValueError) as err:
+            print("Could not reach Homey at %s: %s" % (self.args.address, err))
+            return
+        print("%-28s  %s" % ("device id", "name"))
+        for devid, dev in sorted(devices.items(), key=lambda kv: kv[1].get("name", "")):
+            if "onoff" in dev.get("capabilities", []):
+                print("%-28s  %s" % (devid, dev.get("name", "")))
 
     def quit(self):
         self.menubar_blinker_active = False
@@ -169,7 +165,9 @@ class OnAir(object):
         if macos_version >= 13:
             predicate = 'eventMessage contains "Cameras changed to"'
             extraopts = "--style ndjson"
-            searchexpr = '"Cameras changed to (\[.*\])",'
+            # The message lists every camera and can be long enough that the unified
+            # log truncates it with "<…>", so don't require the closing bracket here.
+            searchexpr = r"Cameras changed to (\[.*)"
             onitem = "to [ControlCenter"
             offitem = "to []"
 
@@ -219,23 +217,23 @@ class OnAir(object):
         config = configparser.ConfigParser()
         config.read(homeconfig)
 
-        user = config.get("DEFAULT", "user", fallback=None)
-        password = config.get("DEFAULT", "password", fallback=None)
-        host = config.get("DEFAULT", "host", fallback="futurehome-smarthub.local")
-        port = config.getint("DEFAULT", "port", fallback=1884)
-        topic = config.get("DEFAULT", "topic", fallback="pt:j1/mt:cmd/rt:dev/rn:zw/ad:1/sv:out_bin_switch/ad:19_0")
+        address = config.get("DEFAULT", "address", fallback=None)
+        token = config.get("DEFAULT", "token", fallback=None)
+        device = config.get("DEFAULT", "device", fallback=None)
         debug = config.getboolean("DEFAULT", "debug", fallback=False)
 
         parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument("--host", nargs=1, help=" ", default=host)
-        parser.add_argument("--port", nargs=1, help=" ", type=int, default=port)
-        parser.add_argument("--topic", nargs=1, help=" ", default=topic)
-        parser.add_argument("--user", nargs=1, default=user)
-        parser.add_argument("--password", nargs=1, default=password)
+        parser.add_argument("--address", help="Homey Pro local IP or hostname", default=address)
+        parser.add_argument("--token", help="Homey Personal Access Token", default=token)
+        parser.add_argument("--device", help="Homey device id of the light", default=device)
+        parser.add_argument("--list-devices", action="store_true", help="List on/off devices and exit")
         parser.add_argument("--debug", action="store_true", help=" ", default=debug)
         return parser.parse_args()
 
 
 if __name__ == "__main__":
     app = OnAir()
-    app.run()
+    if app.args.list_devices:
+        app.list_devices()
+    else:
+        app.run()
