@@ -13,6 +13,13 @@ $(VENV): requirements.txt
 	$(PYTHON) -m pip install -r requirements.txt
 	touch $(VENV)
 
+# Run from source using the build venv (the system Python has no rumps).
+run: $(VENV)
+	$(PYTHON) OnAir.py
+
+debug: $(VENV)
+	$(PYTHON) OnAir.py --debug
+
 archive:
 	cd dist && tar czvf OnAir.app.tgz *.app
 
@@ -23,4 +30,4 @@ format: $(VENV)
 	$(PYTHON) -m pip install black
 	$(PYTHON) -m black -l 140 .
 
-.PHONY: default archive clean format
+.PHONY: default run debug archive clean format
