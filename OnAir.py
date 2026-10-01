@@ -253,7 +253,10 @@ class OnAir(object):
 
     def refresh_lights(self):
         """Rebuild the 'Choose light' submenu from the devices on the Homey."""
-        self.menuLight.clear()
+        # clear() touches the underlying NSMenu, which only exists once something
+        # has been added, so guard the first (empty) rebuild.
+        if len(self.menuLight):
+            self.menuLight.clear()
         if not (self.args.address and self.args.token):
             self.menuLight.add(rumps.MenuItem("(set address and token first)"))
             self.update_status()
