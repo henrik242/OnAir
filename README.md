@@ -11,6 +11,8 @@ Camera usage is detected via CoreMediaIO (no camera permission needed), and the
 light is driven directly over Homey's local HTTP API, so there is no cloud
 roundtrip.
 
+![An "ON AIR" sign lit up above a webcam during a video call](onair-in-action.jpg)
+
 Install
 --
 Install with [Homebrew](https://brew.sh/):
