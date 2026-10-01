@@ -1,3 +1,2 @@
 rumps
-paho-mqtt
 py2app
