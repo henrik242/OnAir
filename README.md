@@ -24,14 +24,14 @@ Or build from source (below).
 
 Setup
 --
-Everything is configured from the menubar:
+Everything is configured from **Settings…** in the menubar:
 
 1. Create a Personal Access Token at <https://my.homey.app> (Settings -> API keys).
-2. **Detect Homey on network** finds your Homey Pro automatically via mDNS. If it
-   is not found, use **Set Homey address…** to enter its IP or hostname.
-3. **Set token…** and paste the token from step 1.
-4. **Choose light** and pick the device to control. The menu lists every Homey
-   device that has an on/off switch.
+2. **Address**: press **Detect** to find your Homey Pro via mDNS (this happens
+   automatically when no address is set), or type its IP or hostname.
+3. **Token**: paste the token from step 1.
+4. **Light**: pick the device to control. The list shows every Homey device that
+   has an on/off switch, and reloads when the address or token changes.
 
 The menubar icon shows a grey "On Air" when idle and blinks red while a camera is
 on. You can also toggle the light manually from the menu.

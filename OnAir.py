@@ -15,7 +15,25 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+import objc
 import rumps
+from AppKit import (
+    NSAlert,
+    NSAlertFirstButtonReturn,
+    NSApplication,
+    NSButton,
+    NSColor,
+    NSFont,
+    NSMakeRect,
+    NSMenuItem,
+    NSPopUpButton,
+    NSTextAlignmentRight,
+    NSTextField,
+    NSView,
+)
+from Foundation import NSObject
+from PyObjCTools import AppHelper
+from rumps.text_field import Editing
 
 HOMECONFIG = str(Path.home()) + "/.onair.ini"
 
@@ -96,6 +114,176 @@ def any_camera_in_use():
     return False
 
 
+# --- settings dialog -------------------------------------------------------
+
+
+class SettingsDialog(NSObject):
+    """One modal dialog for the Homey address (with autodetect), token and light.
+
+    Lights are fetched in the background using whatever address and token are
+    currently in the fields, so the list follows edits before anything is saved.
+    """
+
+    WIDTH = 460
+
+    @objc.python_method
+    def show(self, onair):
+        """Run the dialog. Returns (address, token, device) on Save, else None."""
+        self.onair = onair
+        self.generation = 0  # bumped per lights fetch, so stale results are dropped
+        self.loaded_for = None
+
+        width = self.WIDTH
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, 130))
+
+        def label(text, y):
+            field = NSTextField.labelWithString_(text)
+            field.setFrame_(NSMakeRect(0, y + 3, 64, 18))
+            field.setAlignment_(NSTextAlignmentRight)
+            view.addSubview_(field)
+
+        def button(title, action, y):
+            btn = NSButton.buttonWithTitle_target_action_(title, self, action)
+            btn.setFrame_(NSMakeRect(width - 92, y - 4, 92, 32))
+            view.addSubview_(btn)
+            return btn
+
+        def text_field(value, placeholder, y, w):
+            field = Editing.alloc().initWithFrame_(NSMakeRect(72, y, w, 24))
+            field.setStringValue_(value or "")
+            field.setPlaceholderString_(placeholder)
+            field.setDelegate_(self)
+            view.addSubview_(field)
+            return field
+
+        label("Address", 100)
+        self.address = text_field(onair.args.address, "homey-xxxx.local or IP address", 100, width - 172)
+        self.detect_button = button("Detect", "detect:", 100)
+
+        label("Token", 66)
+        self.token = text_field(onair.args.token, "Personal Access Token", 66, width - 72)
+
+        label("Light", 32)
+        self.light = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(70, 30, width - 166, 26), False)
+        view.addSubview_(self.light)
+        button("Reload", "reload:", 32)
+
+        self.status = NSTextField.labelWithString_("")
+        self.status.setFrame_(NSMakeRect(72, 4, width - 72, 16))
+        self.status.setFont_(NSFont.systemFontOfSize_(NSFont.smallSystemFontSize()))
+        self.status.setTextColor_(NSColor.secondaryLabelColor())
+        view.addSubview_(self.status)
+
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_("OnAir settings")
+        alert.setInformativeText_("Create a token at my.homey.app -> Settings -> API keys.")
+        alert.addButtonWithTitle_("Save")
+        alert.addButtonWithTitle_("Cancel")
+        alert.setAccessoryView_(view)
+        alert.window().setInitialFirstResponder_(self.address)
+
+        if self.address.stringValue():
+            self._load_lights()
+        else:
+            self.detect_(None)
+
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        saved = alert.runModal() == NSAlertFirstButtonReturn
+        self.generation += 1  # ignore fetches still in flight
+        if not saved:
+            return None
+        item = self.light.selectedItem()
+        device = item.representedObject() if item is not None else None
+        return self.address.stringValue().strip(), self.token.stringValue().strip(), device
+
+    # --- actions --------------------------------------------------------------
+
+    def detect_(self, sender):
+        self.detect_button.setEnabled_(False)
+        self.status.setStringValue_("Searching the network for a Homey…")
+
+        def worker():
+            AppHelper.callAfter(self._detected, OnAir.discover_homey())
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def reload_(self, sender):
+        self._load_lights(force=True)
+
+    def controlTextDidEndEditing_(self, notification):
+        self._load_lights()
+
+    # --- helpers --------------------------------------------------------------
+
+    @objc.python_method
+    def _detected(self, address):
+        self.detect_button.setEnabled_(True)
+        if address:
+            self.address.setStringValue_(address)
+            self.status.setStringValue_("Found Homey at %s" % address)
+            self._load_lights()
+        else:
+            self.status.setStringValue_("No Homey found. Enter its address manually.")
+
+    @objc.python_method
+    def _load_lights(self, force=False):
+        address = self.address.stringValue().strip()
+        token = self.token.stringValue().strip()
+        if not (address and token):
+            self.loaded_for = None
+            self._set_lights([], "(set address and token first)")
+            return
+        if not force and self.loaded_for == (address, token):
+            return
+        self.loaded_for = (address, token)
+        self.generation += 1
+        generation = self.generation
+        self._set_lights([], "Loading lights…")
+
+        def worker():
+            try:
+                devices, error = self.onair.homey_onoff_devices(address, token), None
+            except (urllib.error.URLError, OSError, ValueError) as err:
+                devices, error = None, err
+            AppHelper.callAfter(self._lights_loaded, generation, devices, error)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @objc.python_method
+    def _lights_loaded(self, generation, devices, error):
+        if generation != self.generation:
+            return
+        if error is not None:
+            self._set_lights([], "(could not reach Homey)")
+            self.status.setStringValue_("Could not reach Homey: %s" % error)
+        elif not devices:
+            self._set_lights([], "(no on/off devices found)")
+        else:
+            self._set_lights(devices)
+            self.status.setStringValue_("")
+
+    @objc.python_method
+    def _set_lights(self, devices, placeholder=None):
+        current = self.light.selectedItem()
+        selected = current.representedObject() if current is not None else None
+        selected = selected or self.onair.args.device
+        self.light.removeAllItems()
+        menu = self.light.menu()
+        if placeholder:
+            menu.addItem_(NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(placeholder, None, ""))
+            self.light.setEnabled_(False)
+            return
+        self.light.setEnabled_(True)
+        # Add through the menu rather than addItemWithTitle_, which drops
+        # duplicate titles (two lights can share a name).
+        for name, devid in devices:
+            item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(name, None, "")
+            item.setRepresentedObject_(devid)
+            menu.addItem_(item)
+            if devid == selected:
+                self.light.selectItem_(item)
+
+
 class OnAir(object):
     def __init__(self):
         self.args = self.parse_args()
@@ -109,20 +297,14 @@ class OnAir(object):
 
         self.menuStatus = rumps.MenuItem("Homey: not configured")
         self.menuToggle = rumps.MenuItem("Turn on", callback=self.on_air)
-        self.menuDetect = rumps.MenuItem("Detect Homey on network", callback=self.detect_homey)
-        self.menuAddress = rumps.MenuItem("Set Homey address…", callback=self.set_address)
-        self.menuToken = rumps.MenuItem("Set token…", callback=self.set_token)
-        self.menuLight = rumps.MenuItem("Choose light")
+        self.menuSettings = rumps.MenuItem("Settings…", callback=self.open_settings)
 
         self.app.menu = [
             self.menuStatus,
             rumps.separator,
             self.menuToggle,
             rumps.separator,
-            self.menuDetect,
-            self.menuAddress,
-            self.menuToken,
-            self.menuLight,
+            self.menuSettings,
             rumps.separator,
             rumps.MenuItem("About OnAir…", callback=self.open_onair_url),
         ]
@@ -131,7 +313,6 @@ class OnAir(object):
 
     def run(self):
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
-        threading.Thread(target=self.refresh_lights, daemon=True).start()
         self.log(str(self.args))
         self.app.run()
 
@@ -195,12 +376,12 @@ class OnAir(object):
     def homey_configured(self):
         return bool(self.args.address and self.args.token and self.args.device)
 
-    def homey_request(self, path, method="GET", body=None):
-        address = self.args.address
+    def homey_request(self, path, method="GET", body=None, address=None, token=None):
+        address = address or self.args.address
         if "://" not in address:
             address = "http://" + address
         url = address.rstrip("/") + path
-        headers = {"Authorization": "Bearer %s" % self.args.token}
+        headers = {"Authorization": "Bearer %s" % (token or self.args.token)}
         data = None
         if body is not None:
             data = json.dumps(body).encode("utf-8")
@@ -231,9 +412,9 @@ class OnAir(object):
             self.menuStatus.title = "Homey: error (%s)" % err
             self.log("homey_set() failed: %s" % err)
 
-    def homey_onoff_devices(self):
+    def homey_onoff_devices(self, address=None, token=None):
         """Return a sorted list of (name, device_id) for devices with an onoff capability."""
-        devices = self.homey_request("/api/manager/devices/device/")
+        devices = self.homey_request("/api/manager/devices/device/", address=address, token=token)
         found = []
         for devid, dev in (devices or {}).items():
             if "onoff" in dev.get("capabilities", []):
@@ -306,95 +487,17 @@ class OnAir(object):
 
     # --- menu actions ---------------------------------------------------------
 
-    def detect_homey(self, _=None):
-        self.menuStatus.title = "Homey: searching…"
-        threading.Thread(target=self._detect_worker, daemon=True).start()
-
-    def _detect_worker(self):
-        address = self.discover_homey()
-        if address:
-            self.args.address = address
-            self.save_config()
-            self.log("discovered Homey at %s" % address)
-            self.refresh_lights()
-        else:
-            self.menuStatus.title = "Homey: not found"
-            self.log("no Homey found on network")
-        # NSAlert must run on the main thread.
-        from PyObjCTools import AppHelper
-
-        AppHelper.callAfter(self._detect_alert, address)
-
-    @staticmethod
-    def _detect_alert(address):
-        if address:
-            rumps.alert(title="OnAir", message="Found Homey at\n%s" % address)
-        else:
-            rumps.alert(
-                title="OnAir",
-                message="No Homey found on the network.\nUse 'Set Homey address…' to enter it manually.",
-            )
-
-    def set_address(self, _=None):
-        response = rumps.Window(
-            message="Homey Pro IP address or hostname:",
-            title="Homey address",
-            default_text=self.args.address or "",
-            ok="Save",
-            cancel="Cancel",
-            dimensions=(360, 24),
-        ).run()
-        if response.clicked:
-            self.args.address = response.text.strip()
-            self.save_config()
-            self.refresh_lights()
-
-    def set_token(self, _=None):
-        response = rumps.Window(
-            message="Paste your Homey Personal Access Token\n(my.homey.app -> Settings -> API keys):",
-            title="Homey token",
-            default_text=self.args.token or "",
-            ok="Save",
-            cancel="Cancel",
-            dimensions=(480, 24),
-        ).run()
-        if response.clicked:
-            self.args.token = response.text.strip()
-            self.save_config()
-            self.refresh_lights()
-
-    def refresh_lights(self):
-        """Rebuild the 'Choose light' submenu from the devices on the Homey."""
-        # clear() touches the underlying NSMenu, which only exists once something
-        # has been added, so guard the first (empty) rebuild.
-        if len(self.menuLight):
-            self.menuLight.clear()
-        if not (self.args.address and self.args.token):
-            self.menuLight.add(rumps.MenuItem("(set address and token first)"))
-            self.update_status()
+    def open_settings(self, _=None):
+        result = SettingsDialog.alloc().init().show(self)
+        if result is None:
             return
-        try:
-            devices = self.homey_onoff_devices()
-        except (urllib.error.URLError, OSError, ValueError) as err:
-            self.menuLight.add(rumps.MenuItem("(could not reach Homey)"))
-            self.menuStatus.title = "Homey: error (%s)" % err
-            self.log("refresh_lights() failed: %s" % err)
-            return
-        if not devices:
-            self.menuLight.add(rumps.MenuItem("(no on/off devices found)"))
-        for name, devid in devices:
-            item = rumps.MenuItem(name, callback=self.choose_light)
-            item._devid = devid
-            item.state = 1 if devid == self.args.device else 0
-            self.menuLight.add(item)
-        self.update_status()
-
-    def choose_light(self, sender):
-        self.args.device = getattr(sender, "_devid", None)
+        address, token, device = result
+        self.args.address = address
+        self.args.token = token
+        # Keep the old light if the list could not be loaded this time.
+        self.args.device = device or self.args.device
         self.save_config()
-        for item in self.menuLight.values():
-            item.state = 1 if getattr(item, "_devid", None) == self.args.device else 0
-        self.log("selected device %s" % self.args.device)
+        self.log("saved settings: address=%s device=%s" % (address, self.args.device))
         self.update_status()
 
     def update_status(self):
