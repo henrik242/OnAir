@@ -16,6 +16,7 @@ Install
 Install with [Homebrew](https://brew.sh/):
 
 ```
+brew tap henrik242/brew
 brew install --cask henrik242/brew/onair
 ```
 
