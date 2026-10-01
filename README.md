@@ -1,45 +1,41 @@
 ![](onair.png)
 
-OnAir status indicator for macOS camera usage
+OnAir
 ==
 
-A menubar indicator that watches macOS camera usage and turns a light on/off
-through your [Athom Homey Pro](https://homey.app/) using its local HTTP API.
+A macOS menubar app that turns a light on and off through your
+[Athom Homey Pro](https://homey.app/) whenever a camera is in use, so the people
+around you know when you are in a call.
 
-```
-usage: OnAir.py [-h] [--address ADDRESS] [--token TOKEN] [--device DEVICE] [--list-devices] [--debug]
+Camera usage is detected via CoreMediaIO (no camera permission needed), and the
+light is driven directly over Homey's local HTTP API, so there is no cloud
+roundtrip.
 
-options:
-  -h, --help         show this help message and exit
-  --address ADDRESS  Homey Pro local IP or hostname
-  --token TOKEN      Homey Personal Access Token
-  --device DEVICE    Homey device id of the light
-  --list-devices     List on/off devices and exit
-  --debug
-```
+Install
+--
+Download the latest build from
+<https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>,
+unpack it, and move `OnAir.app` to `/Applications`. Or build from source (below).
 
 Setup
 --
-Everything is configured from the menubar, no command line needed:
+Everything is configured from the menubar:
 
-1. Create a Personal Access Token at <https://my.homey.app> (Settings -> API
-   keys).
-2. In the OnAir menu, click **Detect Homey on network** to find your Homey Pro
-   automatically (via mDNS). If it is not found, use **Set Homey address…** to
-   enter its IP or hostname.
-3. Click **Set token…** and paste the token from step 1.
-4. Open **Choose light** and pick the device you want to control. The menu lists
-   every Homey device that has an on/off switch.
+1. Create a Personal Access Token at <https://my.homey.app> (Settings -> API keys).
+2. **Detect Homey on network** finds your Homey Pro automatically via mDNS. If it
+   is not found, use **Set Homey address…** to enter its IP or hostname.
+3. **Set token…** and paste the token from step 1.
+4. **Choose light** and pick the device to control. The menu lists every Homey
+   device that has an on/off switch.
 
-That's it. When any camera turns on, OnAir turns the light on (and blinks the
-menubar icon); when all cameras are off, it turns the light off. You can also
-toggle it manually from the menubar.
+The menubar icon shows a grey "On Air" when idle and blinks red while a camera is
+on. You can also toggle the light manually from the menu.
 
-Configuration
+Configuration file
 --
-The settings above are stored in `~/.onair.ini`, which is also created on first
-run from the bundled template. You can edit it directly instead of using the
-menu:
+Settings are stored in `~/.onair.ini` (created on first run). You can edit it
+directly instead of using the menu:
+
 ```
 [DEFAULT]
 address=homey-xxxxxxxx.local
@@ -47,30 +43,25 @@ token=your-personal-access-token
 device=abcd1234-5678-90ab-cdef-1234567890ab
 debug=False
 ```
-`--list-devices` prints the same device list as the **Choose light** menu, for
-reference.
 
-The app talks to Homey directly on your LAN over
-`PUT http://<address>/api/manager/devices/device/<device>/capability/onoff`,
-so there is no cloud roundtrip and no extra dependencies beyond `rumps`.
+The light is switched with
+`PUT http://<address>/api/manager/devices/device/<device>/capability/onoff`.
 
-Building the app
+Build and run from source
 --
+`make` creates a local `.venv` and installs the dependencies there, so it never
+touches your system Python.
 
 ```
-pip3 install -r requirements.txt
-./setup.py py2app
+make          # build OnAir.app into dist/
+make debug    # run from source with debug logging
+make run      # run from source
 ```
 
-This creates OnAir.app in `dist/`
-
-Releases
---
-Fetch the latest app build from <https://nightly.link/henrik242/OnAir/workflows/build/main/OnAir.app.tgz.zip>
+To list on/off devices from the command line: `.venv/bin/python OnAir.py --list-devices`.
 
 Thanks to
 --
-
 - <https://github.com/jaredks/rumps>
 - <https://github.com/python-zeroconf/python-zeroconf>
 - <https://github.com/ronaldoussoren/py2app>
