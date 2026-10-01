@@ -18,33 +18,37 @@ options:
   --debug
 ```
 
-Configuration
---
-`~/.onair.ini` holds the Homey settings. It is created automatically on the
-first run from the bundled template. Example:
-```
-[DEFAULT]
-address=192.168.1.42
-token=your-personal-access-token
-device=abcd1234-5678-90ab-cdef-1234567890ab
-debug=False
-```
-
 Setup
 --
-1. Find your Homey Pro's IP address (Homey app -> Settings -> General, or your
-   router). Put it in `address`.
-2. Create a Personal Access Token at <https://my.homey.app> (Settings -> API
-   keys). Put it in `token`.
-3. List the devices that have an on/off capability and pick your light's id:
-   ```
-   ./OnAir.py --list-devices
-   ```
-   Put the id in `device`.
+Everything is configured from the menubar, no command line needed:
+
+1. Create a Personal Access Token at <https://my.homey.app> (Settings -> API
+   keys).
+2. In the OnAir menu, click **Detect Homey on network** to find your Homey Pro
+   automatically (via mDNS). If it is not found, use **Set Homey address…** to
+   enter its IP or hostname.
+3. Click **Set token…** and paste the token from step 1.
+4. Open **Choose light** and pick the device you want to control. The menu lists
+   every Homey device that has an on/off switch.
 
 That's it. When any camera turns on, OnAir turns the light on (and blinks the
 menubar icon); when all cameras are off, it turns the light off. You can also
 toggle it manually from the menubar.
+
+Configuration
+--
+The settings above are stored in `~/.onair.ini`, which is also created on first
+run from the bundled template. You can edit it directly instead of using the
+menu:
+```
+[DEFAULT]
+address=homey-xxxxxxxx.local
+token=your-personal-access-token
+device=abcd1234-5678-90ab-cdef-1234567890ab
+debug=False
+```
+`--list-devices` prints the same device list as the **Choose light** menu, for
+reference.
 
 The app talks to Homey directly on your LAN over
 `PUT http://<address>/api/manager/devices/device/<device>/capability/onoff`,
@@ -68,5 +72,6 @@ Thanks to
 --
 
 - <https://github.com/jaredks/rumps>
+- <https://github.com/python-zeroconf/python-zeroconf>
 - <https://github.com/ronaldoussoren/py2app>
 - <https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/>
