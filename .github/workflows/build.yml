@@ -30,4 +30,5 @@ jobs:
         with:
           name: OnAir.app.tgz
           path: dist/OnAir.app.tgz
+          archive: false
 
