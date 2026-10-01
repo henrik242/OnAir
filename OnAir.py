@@ -27,6 +27,7 @@ from AppKit import (
     NSButton,
     NSColor,
     NSFont,
+    NSLineBreakByCharWrapping,
     NSMakeRect,
     NSMenuItem,
     NSPopUpButton,
@@ -137,7 +138,7 @@ class SettingsDialog(NSObject):
         self.loaded_for = None
 
         width = self.WIDTH
-        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, 130))
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, 164))
 
         def label(text: str, y: float) -> None:
             field = NSTextField.labelWithString_(text)
@@ -151,20 +152,28 @@ class SettingsDialog(NSObject):
             view.addSubview_(btn)
             return btn
 
-        def text_field(value: str | None, placeholder: str, y: float, w: float) -> Any:
-            field = Editing.alloc().initWithFrame_(NSMakeRect(72, y, w, 24))
+        def text_field(value: str | None, placeholder: str, y: float, w: float, h: float = 24, wraps: bool = False) -> Any:
+            field = Editing.alloc().initWithFrame_(NSMakeRect(72, y, w, h))
             field.setStringValue_(value or "")
             field.setPlaceholderString_(placeholder)
             field.setDelegate_(self)
+            if wraps:
+                # A token is one long unbroken string, so wrap by character to fill
+                # the extra lines instead of scrolling off to the right.
+                field.setUsesSingleLineMode_(False)
+                cell = field.cell()
+                cell.setWraps_(True)
+                cell.setScrollable_(False)
+                cell.setLineBreakMode_(NSLineBreakByCharWrapping)
             view.addSubview_(field)
             return field
 
-        label("Address", 100)
-        self.address = text_field(onair.args.address, "homey-xxxx.local or IP address", 100, width - 172)
-        self.detect_button = button("Detect", "detect:", 100)
+        label("Address", 130)
+        self.address = text_field(onair.args.address, "homey-xxxx.local or IP address", 130, width - 172)
+        self.detect_button = button("Detect", "detect:", 130)
 
-        label("Token", 66)
-        self.token = text_field(onair.args.token, "Personal Access Token", 66, width - 72)
+        label("Token", 99)  # aligned to the top of the taller, three-line token field
+        self.token = text_field(onair.args.token, "Personal Access Token", 66, width - 72, h=54, wraps=True)
 
         label("Light", 32)
         self.light = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(70, 30, width - 166, 26), False)
