@@ -12,6 +12,9 @@ OPTIONS = {
         "LSUIElement": True,
     },
     "packages": ["rumps", "zeroconf", "ifaddr"],
+    # tkinter is unused but gets pulled in transitively; python.org's Tcl/Tk 9
+    # frameworks contain static stub libs that make py2app's codesign fail.
+    "excludes": ["tkinter", "_tkinter"],
 }
 
 # Dependencies are installed into the build venv from requirements.txt (see the
