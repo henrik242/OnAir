@@ -10,6 +10,8 @@ OPTIONS = {
     "plist": {
         "CFBundleShortVersionString": "3.0.0",
         "LSUIElement": True,
+        "NSLocalNetworkUsageDescription": "OnAir looks for your Homey Pro on the local network.",
+        "NSBonjourServices": ["_homey._tcp"],
     },
     "packages": ["rumps", "zeroconf", "ifaddr"],
     # tkinter is unused but gets pulled in transitively; python.org's Tcl/Tk 9

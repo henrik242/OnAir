@@ -242,17 +242,31 @@ class OnAir(object):
 
     # --- network discovery ----------------------------------------------------
 
-    @staticmethod
-    def discover_homey(timeout=5):
+    @classmethod
+    def discover_homey(cls, timeout=20, attempt_timeout=5):
         """Find a Homey Pro via mDNS (_homey._tcp) and return its address, or None.
 
         Prefers the advertised hostname (homey-<id>.local), which stays valid
         across DHCP lease changes, and falls back to the raw IP address.
+
+        Retries with a fresh Zeroconf instance until `timeout`: the first
+        multicast after launch triggers macOS's Local Network permission prompt
+        and is dropped while the prompt is up, so a single attempt would fail.
         """
         try:
-            from zeroconf import ServiceBrowser, Zeroconf
+            import zeroconf  # noqa: F401
         except ImportError:
             return None
+
+        deadline = time.monotonic() + timeout
+        while True:
+            address = cls._discover_homey_once(attempt_timeout)
+            if address or time.monotonic() >= deadline:
+                return address
+
+    @staticmethod
+    def _discover_homey_once(timeout):
+        from zeroconf import ServiceBrowser, Zeroconf
 
         class _Listener:
             def __init__(self):
