@@ -9,12 +9,12 @@ import ctypes.util
 import json
 import os
 import shutil
+import signal
 import ssl
 import threading
 import time
 import urllib.error
 import urllib.request
-import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -24,18 +24,28 @@ from AppKit import (
     NSAlert,
     NSAlertFirstButtonReturn,
     NSApplication,
+    NSBackingStoreBuffered,
     NSButton,
     NSColor,
+    NSFloatingWindowLevel,
     NSFont,
+    NSImage,
+    NSImageView,
     NSLineBreakByCharWrapping,
+    NSLinkAttributeName,
     NSMakeRect,
     NSMenuItem,
+    NSPanel,
     NSPopUpButton,
+    NSTextAlignmentCenter,
     NSTextAlignmentRight,
     NSTextField,
+    NSTextView,
     NSView,
+    NSWindowStyleMaskClosable,
+    NSWindowStyleMaskTitled,
 )
-from Foundation import NSObject
+from Foundation import NSMakeRange, NSMutableAttributedString, NSObject
 from PyObjCTools import AppHelper
 from rumps.text_field import Editing
 
@@ -47,6 +57,9 @@ HOMECONFIG = str(Path.home()) + "/.onair.ini"
 # to a solid square.
 ICON_IDLE = "onair-template.png"
 ICON_ACTIVE = "onair.png"
+
+VERSION = "3.0.2"
+GITHUB_URL = "https://github.com/henrik242/OnAir"
 
 
 # --- camera usage via CoreMediaIO -------------------------------------------
@@ -307,6 +320,8 @@ class OnAir(object):
         self.air_on = False
         self.menubar_blinker_active = False
         self.camera_state_updater_active = True
+        self._about_window = None
+        self._sigint_installed = False
 
         # Monochrome "On Air" silhouette when idle; the blinker flips to the
         # full-colour red logo while a camera is on, like an on-air sign lighting up.
@@ -323,7 +338,7 @@ class OnAir(object):
             rumps.separator,
             self.menuSettings,
             rumps.separator,
-            rumps.MenuItem("About OnAir…", callback=self.open_onair_url),
+            rumps.MenuItem("About OnAir…", callback=self.show_about),
         ]
 
         self.update_status()
@@ -331,15 +346,75 @@ class OnAir(object):
     def run(self) -> None:
         threading.Thread(target=self.camera_state_updater, daemon=True).start()
         self.log(str(self.args))
+        # rumps only installs a mach-port interrupt and otherwise never hands
+        # control back to Python, so Ctrl-C from `make run` is never delivered.
+        # A periodic main-loop timer gives the interpreter a window to run the
+        # SIGINT handler installed on its first tick (after rumps installs its
+        # own, so ours wins).
+        rumps.Timer(self._interrupt_tick, 1).start()
         self.app.run()
+
+    def _interrupt_tick(self, _timer: Any) -> None:
+        if not self._sigint_installed:
+            signal.signal(signal.SIGINT, lambda *_: rumps.quit_application())
+            self._sigint_installed = True
 
     def log(self, msg: object) -> None:
         if self.args.debug:
             print("%s" % msg)
 
-    @staticmethod
-    def open_onair_url(callback_sender: Any = None) -> None:
-        webbrowser.open_new_tab("https://github.com/henrik242/OnAir")
+    def show_about(self, callback_sender: Any = None) -> None:
+        # A non-modal floating panel, not NSAlert.runModal(): a modal loop blocks
+        # the status-item menu, so clicking the menubar while the dialog is open
+        # freezes the app, and the alert can hide behind other windows.
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        if self._about_window is not None:
+            self._about_window.makeKeyAndOrderFront_(None)
+            return
+
+        width, height = 320, 180
+        panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+            NSMakeRect(0, 0, width, height),
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+            NSBackingStoreBuffered,
+            False,
+        )
+        panel.setTitle_("About OnAir")
+        panel.setReleasedWhenClosed_(False)  # keep the object so it can reopen
+        panel.setLevel_(NSFloatingWindowLevel)  # stay on top, not lost behind
+        view = panel.contentView()
+
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ICON_ACTIVE)
+        icon = NSImage.alloc().initWithContentsOfFile_(icon_path)
+        if icon is not None:
+            image = NSImageView.alloc().initWithFrame_(NSMakeRect((width - 72) / 2, height - 92, 72, 72))
+            image.setImage_(icon)
+            view.addSubview_(image)
+
+        title = "OnAir"
+        body = "%s version %s\n\n%s" % (title, VERSION, GITHUB_URL)
+        content = NSMutableAttributedString.alloc().initWithString_(body)
+        content.addAttribute_value_range_("NSFont", NSFont.systemFontOfSize_(13), NSMakeRange(0, content.length()))
+        # "OnAir" bold, the rest regular.
+        content.addAttribute_value_range_("NSFont", NSFont.boldSystemFontOfSize_(13), NSMakeRange(0, len(title)))
+        # The URL as a clickable link.
+        url_start = body.index(GITHUB_URL)
+        content.addAttribute_value_range_(NSLinkAttributeName, GITHUB_URL, NSMakeRange(url_start, len(GITHUB_URL)))
+        content.addAttribute_value_range_("NSFont", NSFont.systemFontOfSize_(12), NSMakeRange(url_start, len(GITHUB_URL)))
+        content.setAlignment_range_(NSTextAlignmentCenter, NSMakeRange(0, content.length()))
+
+        # A selectable, non-editable text view opens the link in the default
+        # browser when clicked.
+        text = NSTextView.alloc().initWithFrame_(NSMakeRect(10, 20, width - 20, 60))
+        text.setDrawsBackground_(False)
+        text.setEditable_(False)
+        text.setSelectable_(True)
+        text.textStorage().setAttributedString_(content)
+        view.addSubview_(text)
+
+        panel.center()
+        self._about_window = panel
+        panel.makeKeyAndOrderFront_(None)
 
     # --- camera / light state -------------------------------------------------
 
