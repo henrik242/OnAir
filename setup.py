@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 
+import re
+
 from setuptools import setup
 
 APP = ["OnAir.py"]
+_match = re.search(r'^VERSION = "([^"]+)"', open("OnAir.py").read(), re.MULTILINE)
+assert _match, "VERSION not found in OnAir.py"
+VERSION = _match.group(1)
 DATA_FILES = [".onair.ini", "onair.png", "onair-template.png"]
 OPTIONS = {
     "argv_emulation": True,
     "iconfile": "onair.icns",
     "plist": {
-        "CFBundleShortVersionString": "3.0.2",
+        "CFBundleShortVersionString": VERSION,
         "LSUIElement": True,
         "NSLocalNetworkUsageDescription": "OnAir looks for your Homey Pro on the local network.",
         "NSBonjourServices": ["_homey._tcp"],

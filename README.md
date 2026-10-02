@@ -15,12 +15,18 @@ roundtrip.
 
 Install
 --
-Install with [Homebrew](https://brew.sh/):
+Download the latest `OnAir.app` from the
+[releases page](https://github.com/henrik242/OnAir/releases), or install with
+[Homebrew](https://brew.sh/):
 
 ```
 brew tap henrik242/brew
+brew trust --cask henrik242/brew/onair
 brew install --cask henrik242/brew/onair
 ```
+
+`brew trust` is required because OnAir lives in a third-party tap; since Homebrew
+6.0.0 such taps must be trusted before their casks can be installed.
 
 Or build from source (below).
 
