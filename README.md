@@ -54,7 +54,6 @@ directly instead of using the menu:
 address=homey-xxxxxxxx.local
 token=your-personal-access-token
 device=abcd1234-5678-90ab-cdef-1234567890ab
-debug=False
 ```
 
 The light is switched with
