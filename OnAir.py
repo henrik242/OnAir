@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import objc
 import rumps
@@ -314,7 +314,7 @@ class SettingsDialog(NSObject):
                 self.light.selectItem_(item)
 
 
-class OnAir(object):
+class OnAir:
     def __init__(self) -> None:
         self.args = self.parse_args()
         self.air_on = False
@@ -362,6 +362,15 @@ class OnAir(object):
     def log(self, msg: object) -> None:
         if self.args.debug:
             print("%s" % msg)
+
+    @staticmethod
+    def _ui(apply: Callable[[], None]) -> None:
+        # AppKit is not thread-safe; the camera poll and the blinker run on
+        # background threads, so route their menu/icon changes to the main thread.
+        AppHelper.callAfter(apply)
+
+    def _set_status(self, title: str) -> None:
+        self._ui(lambda: setattr(self.menuStatus, "title", title))
 
     def show_about(self, callback_sender: Any = None) -> None:
         # A non-modal floating panel, not NSAlert.runModal(): a modal loop blocks
@@ -428,8 +437,11 @@ class OnAir(object):
         self.menubar_blinker_active = True
         threading.Thread(target=self.menubar_blinker, daemon=True).start()
 
-        self.menuToggle.title = "Turn off"
-        self.menuToggle.set_callback(callback=self.off_air)
+        def apply() -> None:
+            self.menuToggle.title = "Turn off"
+            self.menuToggle.set_callback(callback=self.off_air)
+
+        self._ui(apply)
         self.log("on_air() done")
 
     def off_air(self, callback_sender: Any = None) -> None:
@@ -441,23 +453,35 @@ class OnAir(object):
 
         self.menubar_blinker_active = False
 
-        self.menuToggle.title = "Turn on"
-        self.menuToggle.set_callback(callback=self.on_air)
+        def apply() -> None:
+            self.menuToggle.title = "Turn on"
+            self.menuToggle.set_callback(callback=self.on_air)
+
+        self._ui(apply)
         self.log("off_air() done")
 
     def _show_idle_icon(self) -> None:
-        self.app.template = True
-        self.app.icon = ICON_IDLE
+        def apply() -> None:
+            self.app.template = True
+            self.app.icon = ICON_IDLE
+
+        self._ui(apply)
 
     def _show_active_icon(self) -> None:
-        self.app.template = False
-        self.app.icon = ICON_ACTIVE
+        def apply() -> None:
+            self.app.template = False
+            self.app.icon = ICON_ACTIVE
+
+        self._ui(apply)
 
     def menubar_blinker(self) -> None:
         self.log("menubar_blinker()")
         lit = True
         while self.menubar_blinker_active:
-            self._show_active_icon() if lit else self._show_idle_icon()
+            if lit:
+                self._show_active_icon()
+            else:
+                self._show_idle_icon()
             time.sleep(1)
             lit = not lit
         self._show_idle_icon()
@@ -505,10 +529,10 @@ class OnAir(object):
                 method="PUT",
                 body={"value": bool(on)},
             )
-            self.menuStatus.title = "Homey: connected"
+            self._set_status("Homey: connected")
             self.log("homey_set() done")
         except (urllib.error.URLError, OSError, ValueError) as err:
-            self.menuStatus.title = "Homey: error (%s)" % err
+            self._set_status("Homey: error (%s)" % err)
             self.log("homey_set() failed: %s" % err)
 
     def homey_onoff_devices(self, address: str | None = None, token: str | None = None) -> list[tuple[str, str]]:
@@ -604,13 +628,14 @@ class OnAir(object):
 
     def update_status(self) -> None:
         if self.homey_configured():
-            self.menuStatus.title = "Homey: ready (%s)" % self.args.address
+            title = "Homey: ready (%s)" % self.args.address
         elif not self.args.address:
-            self.menuStatus.title = "Homey: find or set an address"
+            title = "Homey: find or set an address"
         elif not self.args.token:
-            self.menuStatus.title = "Homey: set a token"
+            title = "Homey: set a token"
         else:
-            self.menuStatus.title = "Homey: choose a light"
+            title = "Homey: choose a light"
+        self._set_status(title)
 
     def save_config(self) -> None:
         config = configparser.ConfigParser()
