@@ -618,7 +618,6 @@ class OnAir(object):
         config["DEFAULT"]["address"] = self.args.address or ""
         config["DEFAULT"]["token"] = self.args.token or ""
         config["DEFAULT"]["device"] = self.args.device or ""
-        config["DEFAULT"]["debug"] = str(self.args.debug)
         with open(HOMECONFIG, "w") as handle:
             config.write(handle)
         self.log("saved config to %s" % HOMECONFIG)
@@ -668,14 +667,14 @@ class OnAir(object):
         address = config.get("DEFAULT", "address", fallback=None)
         token = config.get("DEFAULT", "token", fallback=None)
         device = config.get("DEFAULT", "device", fallback=None)
-        debug = config.getboolean("DEFAULT", "debug", fallback=False)
 
         parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         parser.add_argument("--address", help="Homey Pro local IP or hostname", default=address)
         parser.add_argument("--token", help="Homey Personal Access Token", default=token)
         parser.add_argument("--device", help="Homey device id of the light", default=device)
         parser.add_argument("--list-devices", action="store_true", help="List on/off devices and exit")
-        parser.add_argument("--debug", action="store_true", help=" ", default=debug)
+        # debug is a run-time flag only (set via --debug / `make debug`), never persisted.
+        parser.add_argument("--debug", action="store_true", help=" ")
         return parser.parse_args()
 
 
