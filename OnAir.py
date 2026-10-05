@@ -58,7 +58,7 @@ HOMECONFIG = str(Path.home()) + "/.onair.ini"
 ICON_IDLE = "onair-template.png"
 ICON_ACTIVE = "onair.png"
 
-VERSION = "3.0.3"
+VERSION = "3.0.4"
 GITHUB_URL = "https://github.com/henrik242/OnAir"
 
 
