@@ -62,8 +62,8 @@ The light is switched with
 
 Build and run from source
 --
-`make` creates a local `.venv` and installs the dependencies there, so it never
-touches your system Python.
+Requires [uv](https://docs.astral.sh/uv/) (`brew install uv`). `make` creates a
+local `.venv` from `uv.lock`, so it never touches your system Python.
 
 ```
 make          # build OnAir.app into dist/
@@ -71,7 +71,7 @@ make debug    # run from source with debug logging
 make run      # run from source
 ```
 
-To list on/off devices from the command line: `.venv/bin/python OnAir.py --list-devices`.
+To list on/off devices from the command line: `uv run OnAir.py --list-devices`.
 
 Thanks to
 --

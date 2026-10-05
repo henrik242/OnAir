@@ -1,0 +1,31 @@
+[project]
+name = "OnAir"
+# The version lives in OnAir.py (VERSION) and is read by setup.py.
+dynamic = ["version"]
+requires-python = ">=3.14"
+
+# Dependencies live in groups rather than project.dependencies: setuptools would
+# pass those to py2app as install_requires, which py2app rejects.
+[dependency-groups]
+app = [
+    "rumps",
+    "zeroconf",
+]
+dev = [
+    "black",
+    "py2app",
+    "pyright",
+]
+
+[tool.uv]
+# uv.lock uses the revision 5 format written by uv 0.12.
+required-version = ">=0.12"
+# Not an installable package; py2app builds the app from setup.py.
+package = false
+default-groups = "all"
+# py2app needs a framework build of Python (python.org or Homebrew), not the
+# standalone builds uv downloads.
+python-preference = "only-system"
+
+[tool.black]
+line-length = 140

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import re
+from pathlib import Path
 
 from setuptools import setup
 
 APP = ["OnAir.py"]
-_match = re.search(r'^VERSION = "([^"]+)"', open("OnAir.py").read(), re.MULTILINE)
+_match = re.search(r'^VERSION = "([^"]+)"', Path("OnAir.py").read_text(), re.MULTILINE)
 assert _match, "VERSION not found in OnAir.py"
 VERSION = _match.group(1)
 DATA_FILES = [".onair.ini", "onair.png", "onair-template.png"]
@@ -24,11 +25,10 @@ OPTIONS = {
     "excludes": ["tkinter", "_tkinter"],
 }
 
-# Dependencies are installed into the build venv from requirements.txt (see the
-# Makefile), not via setup_requires/install_requires, which newer py2app rejects.
+# Dependencies are installed into the build venv by uv from pyproject.toml (see
+# the Makefile), not via setup_requires/install_requires, which newer py2app rejects.
 setup(
     app=APP,
-    name="OnAir",
     data_files=DATA_FILES,  # type: ignore[arg-type]  # py2app accepts a flat file list
     options={"py2app": OPTIONS},
 )

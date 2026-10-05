@@ -1,3 +1,0 @@
-rumps
-zeroconf
-py2app
