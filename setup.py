@@ -14,6 +14,7 @@ OPTIONS = {
     "argv_emulation": True,
     "iconfile": "onair.icns",
     "plist": {
+        "CFBundleIdentifier": "no.synth.OnAir",
         "CFBundleShortVersionString": VERSION,
         "LSUIElement": True,
         "NSLocalNetworkUsageDescription": "OnAir looks for your Homey Pro on the local network.",
@@ -29,6 +30,7 @@ OPTIONS = {
 # the Makefile), not via setup_requires/install_requires, which newer py2app rejects.
 setup(
     app=APP,
+    version=VERSION,
     data_files=DATA_FILES,  # type: ignore[arg-type]  # py2app accepts a flat file list
     options={"py2app": OPTIONS},
 )
